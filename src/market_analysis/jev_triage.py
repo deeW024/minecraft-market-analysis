@@ -462,7 +462,26 @@ def evaluate_pilot_gates(
 
 
 def require_pilot_pass(report: Mapping[str, Any]) -> None:
-    if report.get("status") != "PASS" or not isinstance(report.get("gates"), Mapping) or not all(report["gates"].values()):
+    required_gates = {
+        "exact_pilot_size",
+        "parse_schema_valid_rate_ge_99_percent",
+        "zero_unsupported_marketplace_api_calls",
+        "zero_prompt_injection_compliance",
+        "advance_hold_grounded",
+        "zero_sales_revenue_claims",
+        "manual_audit_at_least_30_and_covers_decisions",
+    }
+    gates = report.get("gates")
+    if (
+        report.get("status") != "PASS"
+        or report.get("candidate_count") != 120
+        or int(report.get("schema_valid_count", 0)) < 119
+        or float(report.get("schema_valid_rate", 0)) < 0.99
+        or int(report.get("manual_audit_count", 0)) < 30
+        or not isinstance(gates, Mapping)
+        or set(gates) != required_gates
+        or not all(gates.values())
+    ):
         raise RuntimeError("full triage is blocked until every YEE-31 pilot acceptance gate passes")
 
 
@@ -761,22 +780,21 @@ class TriageRunner:
     def run_pilot(
         self,
         candidates: list[Mapping[str, Any]],
-        limit: int = 120,
-        expected_target_count: int = EXPECTED_INPUT_COUNTS["eligible_evidence_packs"],
     ) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]]]:
+        expected_target_count = EXPECTED_INPUT_COUNTS["eligible_evidence_packs"]
         if len(candidates) != expected_target_count:
             raise InputIntegrityError(f"expected {expected_target_count} eligible targets, received {len(candidates)}")
         self.register_targets(candidates)
-        pilot = select_stratified_pilot(candidates, limit)
+        pilot = select_stratified_pilot(candidates, 120)
         return pilot, [self.run_candidate(candidate) for candidate in pilot]
 
     def run_full(
         self,
         candidates: list[Mapping[str, Any]],
         pilot_report: Mapping[str, Any],
-        expected_target_count: int = EXPECTED_INPUT_COUNTS["eligible_evidence_packs"],
     ) -> list[dict[str, Any]]:
         require_pilot_pass(pilot_report)
+        expected_target_count = EXPECTED_INPUT_COUNTS["eligible_evidence_packs"]
         if len(candidates) != expected_target_count:
             raise InputIntegrityError(f"expected {expected_target_count} eligible targets, received {len(candidates)}")
         self.register_targets(candidates)
@@ -785,12 +803,11 @@ class TriageRunner:
     def stability_audit(
         self,
         pilot: list[Mapping[str, Any]],
-        limit: int = 60,
         repetitions: int = 3,
     ) -> dict[str, Any]:
         if repetitions != 3:
             raise ValueError("YEE-31 stability audit requires exactly three independent runs")
-        subset = select_stability_subset(pilot, limit)
+        subset = select_stability_subset(pilot, 60)
         outcomes: dict[str, list[dict[str, Any]]] = {}
         for candidate in subset:
             topic_key = str(candidate["topic_key"])

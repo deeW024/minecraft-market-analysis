@@ -378,7 +378,16 @@ def test_full_run_is_gated_before_any_provider_call(tmp_path):
     candidate = _candidate()
     with _runner(tmp_path, reasoner) as runner:
         with pytest.raises(RuntimeError, match="full triage is blocked"):
-            runner.run_full([candidate], {"status": "FAIL", "gates": {"pilot": False}}, expected_target_count=1)
+            runner.run_full([candidate], {"status": "FAIL", "gates": {"pilot": False}})
+        with pytest.raises(RuntimeError, match="full triage is blocked"):
+            runner.run_full([candidate], {
+                "status": "PASS",
+                "candidate_count": 120,
+                "schema_valid_count": 120,
+                "schema_valid_rate": 1.0,
+                "manual_audit_count": 30,
+                "gates": {"pilot": True},
+            })
     assert reasoner.requests == []
 
 
