@@ -93,11 +93,20 @@ def test_normalization_stopwords_versions_and_deduplicated_ngrams():
 
 
 def test_ascii_and_typographic_possessives_do_not_create_s_token():
-    ascii_tokens = normalize_tokens("Farmer's Delight")
-    typographic_tokens = normalize_tokens("Farmer’s Delight")
-    assert ascii_tokens == typographic_tokens == ["farmer", "delight"]
+    examples = [
+        ("Farmer's Delight", "farmer"),
+        ("Farmer’s Delight", "farmer"),
+        ("Saro´s Delight", "saro"),
+        ("Felix′s Delight", "felix"),
+        ("mrqx`s Delight", "mrqx"),
+        ("Farmer 's Delight", "farmer"),
+    ]
+    for title, expected_name in examples:
+        assert normalize_tokens(title) == [expected_name, "delight"]
+        assert "s" not in title_ngrams(title)
     assert title_ngrams("Farmer's Delight") == ["delight", "farmer", "farmer delight"]
     assert title_ngrams("Farmer’s Delight") == ["delight", "farmer", "farmer delight"]
+    assert normalize_tokens("Fiasco's_47 Carrot") == ["fiasco", "carrot"]
 
 
 def test_representative_examples_are_new_and_use_source_id_tie_break():

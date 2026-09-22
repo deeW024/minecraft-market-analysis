@@ -23,8 +23,10 @@ in the retrieval DB metadata and production manifest.
 normalizer applies Unicode NFKC, case folding, whitespace normalization and
 punctuation boundaries, then stable tokenization. It does not stem words.
 Before punctuation tokenization, ASCII and typographic apostrophes are
-canonicalized and possessive `'s` clitics are removed, so `Farmer's` and
-`Farmer’s` normalize identically to `farmer` without emitting an `s` token.
+canonicalized and possessive `'s` clitics are removed. This covers curly
+quotes, acute accents, prime marks, backticks, and a space before the clitic,
+so `Farmer's` and `Farmer’s` normalize identically to `farmer` without
+emitting an `s` token.
 Numeric-only and version-only tokens are removed from title topic phrases.
 The explicit stopword/domain-stopword file is `src/market_analysis/topic_stopwords.txt`.
 

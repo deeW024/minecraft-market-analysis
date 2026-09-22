@@ -31,6 +31,10 @@ NORMALIZATION_VERSION = "yee-30-topic-normalization-v2"
 STOPWORD_VERSION = "yee-30-stopwords-v1"
 TOPIC_SCHEMA_VERSION = "yee-30-topic-layer-v0.1"
 NULL_TOKEN = r"\N"
+_APOSTROPHE_TRANSLATION = str.maketrans({
+    "’": "'", "‘": "'", "‛": "'", "ʼ": "'", "ʻ": "'", "′": "'",
+    "´": "'", "`": "'", "＇": "'",
+})
 
 CORPUS_COLUMNS = [
     "source", "source_resource_id", "canonical_identity", "slug", "title", "summary",
@@ -164,9 +168,9 @@ def normalize_tokens(value: Any, stopwords: frozenset[str] | set[str] | None = N
     if value is None:
         return []
     stopwords = stopwords or frozenset()
-    text = unicodedata.normalize("NFKC", str(value)).casefold()
-    text = text.translate(str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "＇": "'"}))
-    text = re.sub(r"(?<=\w)'s\b", "", text, flags=re.UNICODE)
+    text = unicodedata.normalize("NFKC", str(value).translate(_APOSTROPHE_TRANSLATION)).casefold()
+    text = text.translate(_APOSTROPHE_TRANSLATION)
+    text = re.sub(r"(?<=\w)\s*'s(?=$|[\W_])", "", text, flags=re.UNICODE)
     text = re.sub(r"[\W_]+", " ", text, flags=re.UNICODE)
     tokens = []
     for token in text.split():
