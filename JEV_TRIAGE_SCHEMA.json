@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "yee-31-triage-v0.1",
+  "title": "YEE-31 candidate triage response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "topic_key",
+    "concept_label",
+    "topic_quality",
+    "decision",
+    "confidence",
+    "market_pattern",
+    "evidence_for",
+    "evidence_against",
+    "saturation_or_competition_signals",
+    "demand_signals",
+    "paid_supply_signals",
+    "key_uncertainties",
+    "external_research_needed",
+    "external_research_questions",
+    "rationale"
+  ],
+  "$defs": {
+    "evidence_ref": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "canonical_identity"],
+          "properties": {
+            "kind": { "const": "identity" },
+            "canonical_identity": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "source", "field"],
+          "properties": {
+            "kind": { "const": "topic_source_fact" },
+            "source": { "enum": ["voxel", "modrinth", "hangar"] },
+            "field": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "claim_type", "evidence_refs"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "claim_type": { "enum": ["observed", "inference", "unknown"] },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence_ref" }
+        }
+      }
+    },
+    "claim_list": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/claim" }
+    }
+  },
+  "properties": {
+    "topic_key": { "type": "string", "minLength": 1 },
+    "concept_label": { "type": "string", "minLength": 1 },
+    "topic_quality": { "enum": ["coherent", "ambiguous", "generic_or_noise"] },
+    "decision": { "enum": ["ADVANCE", "HOLD", "REJECT"] },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "market_pattern": { "$ref": "#/$defs/claim_list" },
+    "evidence_for": { "$ref": "#/$defs/claim_list" },
+    "evidence_against": { "$ref": "#/$defs/claim_list" },
+    "saturation_or_competition_signals": { "$ref": "#/$defs/claim_list" },
+    "demand_signals": { "$ref": "#/$defs/claim_list" },
+    "paid_supply_signals": { "$ref": "#/$defs/claim_list" },
+    "key_uncertainties": { "type": "array", "items": { "type": "string" } },
+    "external_research_needed": { "type": "boolean" },
+    "external_research_questions": { "type": "array", "items": { "type": "string" } },
+    "rationale": { "$ref": "#/$defs/claim" }
+  }
+}

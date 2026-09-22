@@ -43,3 +43,9 @@ YEE-30 does not make marketplace API calls or perform cross-market identity
 merge, embeddings, semantic clustering, JEV/LLM analysis, scoring, ranking,
 recommendation or YEE-31 work.
 
+## YEE-31 JEV triage harness
+
+The YEE-31 provider-neutral reasoning harness, evidence-only prompt, strict
+response schema, and fixture tests are documented in [YEE31_HARNESS.md](YEE31_HARNESS.md).
+Production inference requires an authorized JEV transport; the harness does
+not substitute another model or assume an undocumented JEV endpoint.
