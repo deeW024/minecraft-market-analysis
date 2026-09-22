@@ -27,4 +27,19 @@ byte sizes and SHA-256 digests.
 See [FEATURE_SCHEMA.md](FEATURE_SCHEMA.md) for field definitions, null semantics,
 cohort boundaries, percentile tie handling, and facet counting rules.
 
+## YEE-30 topic layer
+
+YEE-30 adds a deterministic read-only transformation of the accepted YEE-29
+analysis database:
+
+`resource corpus` → `topic_source_facts` → `candidate_topics` → `evidence packs` → `retrieval.db`
+
+Run `python -m market_analysis.topic_cli build` with `--input-db`,
+`--output-dir`, `--replay-output-dir`, and the YEE-30 commit SHA. See
+[TOPIC_SCHEMA.md](TOPIC_SCHEMA.md) for normalization, support gates, candidate
+classes, evidence sampling and retrieval details.
+
+YEE-30 does not make marketplace API calls or perform cross-market identity
+merge, embeddings, semantic clustering, JEV/LLM analysis, scoring, ranking,
+recommendation or YEE-31 work.
 
