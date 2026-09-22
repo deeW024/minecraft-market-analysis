@@ -1,30 +1,26 @@
 # minecraft-market-analysis
 
-YEE-29 deterministic analytical feature layer for the BBB Market project.
+This repository contains deterministic BBB Market analytical work-order
+pipelines. The YEE-29 feature layer is retained as the baseline; YEE-30 adds a
+read-only lexical topic/candidate and local retrieval layer.
 
-The pipeline consumes the accepted YEE-28 SQLite database read-only and produces:
+## YEE-30 build
 
-`resource_features` → `segment_facts` → `source_distributions`
+Run from the repository root with the accepted YEE-29 `analysis.db`:
 
-It makes no network calls and does not perform matching, enrichment, embeddings,
-JEV/LLM analysis, scoring, ranking, or product selection.
-
-## Run
-
-```text
-python -m market_analysis.cli build \
-  --input-db <accepted YEE-28 production.db> \
-  --output-dir <new output directory> \
-  --analysis-as-of 2026-09-22T17:13:34Z \
-  --code-version <analysis commit SHA>
+```powershell
+python -m market_analysis.topic_cli build `
+  --input-db F:\path\to\YEE-29\analysis.db `
+  --output-dir outputs\yee-30 `
+  --replay-output-dir outputs\yee-30-replay `
+  --code-version <YEE-30 commit SHA>
 ```
 
-The input is opened with SQLite `mode=ro` and `PRAGMA query_only=ON`. The command
-fails closed unless the accepted source and enrichment counts match the YEE-29
-baseline. Output files are ordered by stable keys and include a manifest with
-byte sizes and SHA-256 digests.
+The build refuses non-canonical source counts, opens the input in SQLite
+read-only mode, writes `retrieval.db`, deterministic exports, QA and a SHA-256
+manifest. See [TOPIC_SCHEMA.md](TOPIC_SCHEMA.md) for normalization, support
+gates, candidate classes, evidence sampling and retrieval details.
 
-See [FEATURE_SCHEMA.md](FEATURE_SCHEMA.md) for field definitions, null semantics,
-cohort boundaries, percentile tie handling, and facet counting rules.
-
+No marketplace API calls, cross-market identity merge, embeddings, JEV/LLM,
+scoring, ranking or recommendation are part of YEE-30.
 
