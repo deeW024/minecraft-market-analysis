@@ -209,13 +209,17 @@ def percentile_map(rows: list[dict[str, Any]]) -> None:
     for source, values in grouped.items():
         counts = Counter(values)
         n = len(values)
+        lower_by_value: dict[float, int] = {}
+        lower = 0
+        for value, ties in sorted(counts.items()):
+            lower_by_value[value] = lower
+            lower += ties
         for row in rows:
             if row["source"] != source or row["downloads_total"] is None:
                 continue
             value = float(row["downloads_total"])
-            lower = sum(count for candidate, count in counts.items() if candidate < value)
             ties = counts[value]
-            percentile = 100.0 if n == 1 else 100.0 * (lower + (ties - 1) / 2) / (n - 1)
+            percentile = 100.0 if n == 1 else 100.0 * (lower_by_value[value] + (ties - 1) / 2) / (n - 1)
             row["demand_percentile"] = round_number(percentile)
 
 
