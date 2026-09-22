@@ -1,0 +1,31 @@
+{
+  "model": "jev-latest",
+  "state": {
+    "fixture": "contract-test-only",
+    "subject": "One bounded candidate state"
+  },
+  "questions": {
+    "decision": {
+      "type": "choice",
+      "instructions": "Choose one bounded answer.",
+      "criteria": {
+        "ADVANCE": "Continue research",
+        "HOLD": "Review uncertainty",
+        "REJECT": "Stop research"
+      }
+    },
+    "risk": {
+      "type": "score",
+      "instructions": "Rate on the ordered rubric.",
+      "criteria": ["low", "medium", "high"]
+    },
+    "needs_research": {
+      "type": "noul",
+      "instructions": "Is later research needed?",
+      "criteria": {
+        "true": "More evidence is needed",
+        "false": "No more evidence is needed"
+      }
+    }
+  }
+}

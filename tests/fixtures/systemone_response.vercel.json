@@ -1,0 +1,49 @@
+{
+  "model": "typesafe-ai/jev",
+  "answers": {
+    "decision": {
+      "type": "choice",
+      "choice": "ADVANCE",
+      "confidence": 0.8,
+      "probabilities": {
+        "ADVANCE": 0.8,
+        "HOLD": 0.15,
+        "REJECT": 0.05
+      }
+    },
+    "risk": {
+      "type": "score",
+      "score": 1.2,
+      "confidence": 0.72,
+      "legend": {
+        "0": "low",
+        "1": "medium",
+        "2": "high"
+      },
+      "probabilities": {
+        "0": 0.1,
+        "1": 0.6,
+        "2": 0.3
+      }
+    },
+    "needs_research": {
+      "type": "noul",
+      "noul": 0.94
+    }
+  },
+  "usage": {
+    "input_tokens": 42,
+    "output_tokens": 0
+  },
+  "provider_metadata": {
+    "gateway": {
+      "routing": {
+        "originalModelId": "typesafe-ai/jev",
+        "resolvedProvider": "typesafe-ai",
+        "canonicalSlug": "typesafe-ai/jev",
+        "finalProvider": "typesafe-ai"
+      },
+      "generationId": "gen_fixture_only"
+    }
+  }
+}

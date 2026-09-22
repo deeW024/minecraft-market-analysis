@@ -45,7 +45,8 @@ recommendation or YEE-31 work.
 
 ## YEE-31 JEV triage harness
 
-The YEE-31 provider-neutral reasoning harness, evidence-only prompt, strict
-response schema, and fixture tests are documented in [YEE31_HARNESS.md](YEE31_HARNESS.md).
-Production inference requires an authorized JEV transport; the harness does
-not substitute another model or assume an undocumented JEV endpoint.
+The YEE-31 Jev-native `state + Choice/Score/Noul questions` transport,
+deterministic derived output, credential handling and fixture tests are
+documented in [YEE31_HARNESS.md](YEE31_HARNESS.md). No model-generated prose or
+free-form JSON is part of the production path. Live inference remains gated on
+an authorized runtime credential and an explicit pilot decision.

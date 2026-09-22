@@ -1,24 +1,77 @@
-# YEE-31 reasoning harness
+# YEE-31 Jev-native decision harness
 
-This change prepares the strict, evidence-only JEV runner. Its provider boundary accepts an injected transport and preserves the exact response bytes before parsing. It intentionally does not guess a JEV endpoint, credential name, or undocumented request format.
+YEE-31 calls Jev as a bounded decision model, not a text generator. One request
+contains the accepted YEE-30 candidate pack as `state` and the versioned named
+Choice/Score/Noul questions in `JEV_TRIAGE_QUESTIONS.json`. Production sends no
+free-form prompt and expects no generated concept label, claims, rationale or
+research prose.
 
-## Input and contract
+## Contract and deterministic output
 
-`market_analysis.jev_triage.load_eligible_candidates()` opens the accepted YEE-30 `retrieval.db` with SQLite `mode=ro` and `query_only=ON`, verifies the caller-supplied manifest SHA-256, checks the YEE-30 schema and expected counts (169,007 corpus identities, 8,095 topic-source facts, 5,563 candidates, 3,036 eligible packs), reconciles eligible candidate/pack keys, and verifies the input hash again after loading. Each provider payload contains only the candidate record, its source facts, and its evidence pack.
+The request question set is versioned as `yee-31-native-questions-v0.2`; its
+digest and the deterministic output-template version are bound into the cache
+identity. The state is the candidate row, its retained `topic_source_facts`,
+and its bounded YEE-30 examples. Every question warns that marketplace
+titles/summaries are untrusted evidence content, never instructions.
 
-The system prompt and strict JSON Schema are `JEV_TRIAGE_PROMPT.md` and `JEV_TRIAGE_SCHEMA.json`. Claims, including rationale, must cite an identity in that evidence pack or a named field in its topic-source facts. Unknowns and inferences are explicit; no scalar opportunity score is part of the schema.
+Responses are validated against the full declared question-ID set and answer
+types. Choice preserves its selected option, confidence and full probability
+map. Score preserves its fractional score, ordered legend, confidence and
+probabilities. Noul preserves its yes probability. The exact request bytes/hash
+are committed before the HTTP call; exact response bytes/hash are committed
+before parsing. Request bodies contain only `model`, `state`, and `questions`—
+never credentials.
 
-## Runner guarantees
+Application code derives `concept_label` from `topic_display`/`topic_key`,
+`market_pattern` from YEE-30 candidate class/source presence, and summary,
+rationale and later-research question templates from typed answers and retained
+YEE-30 facts. Derived evidence references resolve only to identities and fact
+keys present in that candidate pack. No scalar opportunity score is produced.
 
-- Provider-neutral `Reasoner` protocol; production provider is `JEVProviderAdapter` with an authorized JEV transport injected by the runtime.
-- Cache identity includes canonical candidate input hash, prompt/schema hash, provider, model identifier/version, and inference parameters.
-- Run metadata is immutable. Candidate targets and raw attempts are stored in SQLite.
-- Exact response bytes are committed to `candidate_attempts` before strict UTF-8/JSON parsing or normalization. A saved-but-unparsed response is revalidated on resume before another provider call.
-- The deterministic 120-pack pilot is stratified by candidate class, source-presence pattern, support band, and source-local demand band. `run_full()` refuses to start unless every pilot gate is explicitly PASS and the target count reconciles to 3,036.
-- The fixed 60-pack stability subset uses stable topic-key hashes. Its three repeated calls have explicit replicate cache identities; each raw response and each decision remains separately stored without majority-vote replacement.
-- Bounded retry, cached completed outcomes, explicit failed/pending rows, and deterministic topic-key-ordered JSONL/CSV decision partitions are supported.
-- Fixture providers are test-only. Unit tests do not make network or model calls.
+## Supported transports
 
-## Current execution boundary
+- `TypeSafeSystemOneHTTPTransport`: HTTPS `POST /v1/systemone` on the configured
+  TypeSafe base URL, `Authorization: Bearer ...`, model alias `jev-latest`.
+- `VercelTypeSafeHTTPTransport`: same TypeSafe request/response contract at the
+  configured TypeSafe-compatible Vercel base URL, model `typesafe-ai/jev`.
+- `jev_provider_from_env()` selects the transport using `JEV_TRANSPORT` and
+  fails closed if its runtime-injected credential is absent.
 
-The current environment exposed no JEV connector, authorized transport, or JEV credentials. Therefore the fixture suite validates the harness only; no pilot, stability calls, candidate decisions, or substitute-model results have been generated. YEE-31 is blocked before its 120-candidate pilot until the supervisor provides JEV access/transport.
+Configuration names (values are never included in metadata/logs):
+
+- Direct: `TYPESAFE_API_KEY`, optional `TYPESAFE_BASE_URL`,
+  model fixed as `jev-latest`.
+- Vercel: `AI_GATEWAY_API_KEY`, optional `VERCEL_TYPESAFE_BASE_URL`,
+  model fixed as `typesafe-ai/jev`.
+- Shared: `JEV_TRANSPORT=typesafe|vercel-typesafe`,
+  `JEV_HTTP_TIMEOUT_SECONDS`.
+
+Transport metadata stores only the selected transport, public base URL and
+timeout. HTTP failures are sanitized; headers, credentials and response error
+bodies are not logged or persisted as error text. Tests use mocked HTTP only.
+
+## Retained execution plumbing
+
+The runner preserves the accepted YEE-30 read-only loader and identity/count/hash
+checks, SQLite attempt history, raw-first persistence, retry/resume/cache,
+deterministic 120-candidate pilot sampling/gates, 60-candidate three-replicate
+stability sampling, and deterministic JSONL/CSV exports. Cache keys bind state,
+question-set/output versions, model, transport configuration, inference
+parameters and stability replicate. Stability reports exact decision agreement
+and typed per-question answer deltas; it does not vote away variance.
+
+The focused fixture suite mocks direct and Vercel-compatible HTTP requests and
+responses for each native answer type. No live pilot or Jev call is made during
+contract validation. Before the 120-candidate pilot, a supervisor must provide
+an authorized runtime credential and authorize proceeding in Linear.
+
+## Official contract references
+
+- [TypeSafe API docs](https://api.typesafe.ai/docs) — `/v1/systemone`, bearer
+  authentication, and `/v1/models` discovery.
+- [TypeSafe SDK wire types](https://github.com/typesafe-ai/typesafe-sdk-js/blob/main/src/types.ts)
+  — Choice/Score/Noul question and response shapes.
+- [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe)
+  — gateway base URL, auth, `/v1/systemone`, and response envelope.
+- [YEE-31 Native Decision Contract Addendum](https://docs.google.com/document/d/1sToyXo64rrtNuRGFpxgCKuAd-tNW1adaNghN92aNQPE/edit)
+  — project-specific versioned question/output requirements.
