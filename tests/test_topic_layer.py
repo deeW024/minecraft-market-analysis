@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from market_analysis.topic_layer import complete_replay_check, normalize_tokens, run_pipeline, title_ngrams
+from market_analysis.topic_layer import (
+    _select_evidence_rows,
+    complete_replay_check,
+    normalize_tokens,
+    run_pipeline,
+    title_ngrams,
+)
 
 
 FIXTURE_COUNTS = {"voxel": 2, "modrinth": 10, "hangar": 3}
@@ -84,6 +90,37 @@ def _fixture_db(path: Path) -> None:
 def test_normalization_stopwords_versions_and_deduplicated_ngrams():
     assert normalize_tokens("The Minecraft v1.21 plugin!!!", frozenset({"the", "minecraft", "plugin"})) == []
     assert title_ngrams("The Minecraft SkyBlock SkyBlock 1.21 Plugin") == ["skyblock", "skyblock skyblock"]
+
+
+def test_ascii_and_typographic_possessives_do_not_create_s_token():
+    ascii_tokens = normalize_tokens("Farmer's Delight")
+    typographic_tokens = normalize_tokens("Farmer’s Delight")
+    assert ascii_tokens == typographic_tokens == ["farmer", "delight"]
+    assert title_ngrams("Farmer's Delight") == ["delight", "farmer", "farmer delight"]
+    assert title_ngrams("Farmer’s Delight") == ["delight", "farmer", "farmer delight"]
+
+
+def test_representative_examples_are_new_and_use_source_id_tie_break():
+    rows = []
+    for number in range(1, 21):
+        rows.append({
+            "canonical_identity": f"modrinth:id-{number:02d}",
+            "source_resource_id": f"id-{number:02d}",
+            "demand_percentile": 101 - number,
+            "freshness_age_days": number - 6 if 6 <= number <= 10 else 100 + number,
+        })
+
+    selected = _select_evidence_rows(list(reversed(rows)))
+    highest = {key for key, roles in selected.items() if "highest_demand_percentile" in roles}
+    freshest = {key for key, roles in selected.items() if "freshest" in roles}
+    representatives = {key for key, roles in selected.items() if "representative" in roles}
+
+    assert highest == {f"modrinth:id-{number:02d}" for number in range(1, 6)}
+    assert freshest == {f"modrinth:id-{number:02d}" for number in range(6, 11)}
+    assert representatives == {f"modrinth:id-{number:02d}" for number in range(11, 16)}
+    assert representatives.isdisjoint(highest | freshest)
+    assert len(selected) == 15
+    assert all(selected[key] == {"representative"} for key in representatives)
 
 
 def test_fixture_build_gates_candidates_facts_and_retrieval(tmp_path):

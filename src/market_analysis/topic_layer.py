@@ -27,7 +27,7 @@ SUPPORT_GATES = {"voxel": 2, "hangar": 3, "modrinth": 10}
 DEMAND_SOURCES = ("modrinth", "hangar")
 EVIDENCE_EXAMPLES_PER_SOURCE = 15
 EVIDENCE_EXAMPLES_PER_SELECTION = 5
-NORMALIZATION_VERSION = "yee-30-topic-normalization-v1"
+NORMALIZATION_VERSION = "yee-30-topic-normalization-v2"
 STOPWORD_VERSION = "yee-30-stopwords-v1"
 TOPIC_SCHEMA_VERSION = "yee-30-topic-layer-v0.1"
 NULL_TOKEN = r"\N"
@@ -165,6 +165,8 @@ def normalize_tokens(value: Any, stopwords: frozenset[str] | set[str] | None = N
         return []
     stopwords = stopwords or frozenset()
     text = unicodedata.normalize("NFKC", str(value)).casefold()
+    text = text.translate(str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "＇": "'"}))
+    text = re.sub(r"(?<=\w)'s\b", "", text, flags=re.UNICODE)
     text = re.sub(r"[\W_]+", " ", text, flags=re.UNICODE)
     tokens = []
     for token in text.split():
@@ -210,6 +212,34 @@ def title_ngrams(title: Any, stopwords: frozenset[str] | set[str] | None = None)
 
 def _retrieval_tokens(value: str) -> list[str]:
     return sorted(set(normalize_tokens(value)))
+
+
+def _select_evidence_rows(rows: list[Any]) -> dict[str, set[str]]:
+    """Select up to five rows per role, keeping representative identities new."""
+    selected: dict[str, set[str]] = {}
+
+    def add(row: Any, role: str) -> None:
+        selected.setdefault(row["canonical_identity"], set()).add(role)
+
+    demand_rows = sorted(
+        (row for row in rows if row["demand_percentile"] is not None),
+        key=lambda row: (-float(row["demand_percentile"]), str(row["source_resource_id"])),
+    )
+    for row in demand_rows[:EVIDENCE_EXAMPLES_PER_SELECTION]:
+        add(row, "highest_demand_percentile")
+    fresh_rows = sorted(
+        (row for row in rows if row["freshness_age_days"] is not None),
+        key=lambda row: (int(row["freshness_age_days"]), str(row["source_resource_id"])),
+    )
+    for row in fresh_rows[:EVIDENCE_EXAMPLES_PER_SELECTION]:
+        add(row, "freshest")
+    representatives = sorted(
+        (row for row in rows if row["canonical_identity"] not in selected),
+        key=lambda row: str(row["source_resource_id"]),
+    )
+    for row in representatives[:EVIDENCE_EXAMPLES_PER_SELECTION]:
+        add(row, "representative")
+    return selected
 
 
 def _input_connection(input_db: Path) -> sqlite3.Connection:
@@ -767,25 +797,7 @@ def _build_evidence(connection: sqlite3.Connection, candidates: list[dict[str, A
                     (topic_key, source),
                 )
             )
-            selected: dict[str, set[str]] = {}
-
-            def add(row: sqlite3.Row, role: str) -> None:
-                selected.setdefault(row["canonical_identity"], set()).add(role)
-
-            demand_rows = sorted(
-                (row for row in rows if row["demand_percentile"] is not None),
-                key=lambda row: (-float(row["demand_percentile"]), str(row["source_resource_id"])),
-            )
-            for row in demand_rows[:EVIDENCE_EXAMPLES_PER_SELECTION]:
-                add(row, "highest_demand_percentile")
-            fresh_rows = sorted(
-                (row for row in rows if row["freshness_age_days"] is not None),
-                key=lambda row: (int(row["freshness_age_days"]), str(row["source_resource_id"])),
-            )
-            for row in fresh_rows[:EVIDENCE_EXAMPLES_PER_SELECTION]:
-                add(row, "freshest")
-            for row in rows[:EVIDENCE_EXAMPLES_PER_SELECTION]:
-                add(row, "representative")
+            selected = _select_evidence_rows(rows)
             row_by_identity = {row["canonical_identity"]: row for row in rows}
             chosen = [row_by_identity[identity] for identity in sorted(selected)[:EVIDENCE_EXAMPLES_PER_SOURCE]]
             examples = []

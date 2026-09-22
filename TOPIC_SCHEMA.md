@@ -18,10 +18,13 @@ in the retrieval DB metadata and production manifest.
 
 ## Versioned normalization
 
-`NORMALIZATION_VERSION=yee-30-topic-normalization-v1` and
+`NORMALIZATION_VERSION=yee-30-topic-normalization-v2` and
 `STOPWORD_VERSION=yee-30-stopwords-v1` are versioned with the code. The
 normalizer applies Unicode NFKC, case folding, whitespace normalization and
 punctuation boundaries, then stable tokenization. It does not stem words.
+Before punctuation tokenization, ASCII and typographic apostrophes are
+canonicalized and possessive `'s` clitics are removed, so `Farmer's` and
+`Farmer’s` normalize identically to `farmer` without emitting an `s` token.
 Numeric-only and version-only tokens are removed from title topic phrases.
 The explicit stopword/domain-stopword file is `src/market_analysis/topic_stopwords.txt`.
 
