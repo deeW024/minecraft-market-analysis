@@ -6,6 +6,8 @@ import json
 import math
 import re
 import sqlite3
+import shutil
+import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -524,6 +526,103 @@ def _artifact_info(path: Path, root: Path) -> dict[str, Any]:
     return {"path": str(path.relative_to(root)).replace("\\", "/"), "bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
+def _qa_checks(rows: list[dict[str, Any]], input_qa: dict[str, Any], expected_counts: dict[str, int],
+               analysis_db: Path, export_paths: list[Path], output_dir: Path,
+               input_hash_before: str, input_hash_after: str,
+               expected_voxel_enrichment: int) -> dict[str, Any]:
+    expected_total = sum(expected_counts.values())
+    expected_identities = {row["canonical_identity"] for row in rows}
+    checks: dict[str, bool] = {}
+    details: dict[str, Any] = {}
+    conn = sqlite3.connect(f"file:{analysis_db.as_posix()}?mode=ro", uri=True)
+    try:
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        checks["analysis_db_integrity"] = integrity == "ok"
+        details["analysis_db_integrity"] = integrity
+        feature_count = conn.execute("SELECT COUNT(*) FROM resource_features").fetchone()[0]
+        checks["resource_feature_count"] = feature_count == expected_total
+        details["resource_feature_count"] = feature_count
+        duplicate_count = conn.execute("SELECT COUNT(*) FROM (SELECT source, source_resource_id FROM resource_features GROUP BY source, source_resource_id HAVING COUNT(*) > 1)").fetchone()[0]
+        checks["no_duplicate_resource_feature_identities"] = duplicate_count == 0
+        details["duplicate_resource_feature_identities"] = duplicate_count
+        output_identities = {f"{source}:{resource_id}" for source, resource_id in conn.execute("SELECT source, source_resource_id FROM resource_features")}
+        checks["identity_set_matches_input"] = output_identities == expected_identities
+        details["input_identity_count"] = len(expected_identities)
+        details["output_identity_count"] = len(output_identities)
+        source_counts = dict(conn.execute("SELECT source, COUNT(*) FROM resource_features GROUP BY source").fetchall())
+        checks["source_counts_exact"] = source_counts == expected_counts
+        details["source_counts"] = dict(sorted(source_counts.items()))
+
+        mismatch = conn.execute("""
+            SELECT COUNT(*) FROM resource_features
+            WHERE (downloads_total IS NULL) != (demand_percentile IS NULL)
+        """).fetchone()[0]
+        checks["percentile_null_semantics"] = mismatch == 0
+        details["percentile_null_alignment_mismatches"] = mismatch
+        mapping_mismatch = conn.execute("""
+            SELECT COUNT(*) FROM resource_features
+            WHERE (source IN ('modrinth','hangar') AND demand_download_count IS NOT download_count)
+               OR (source='voxel' AND download_count IS NOT NULL)
+               OR (demand_download_count IS NOT NULL AND demand_metric_source IS NULL)
+        """).fetchone()[0]
+        checks["source_demand_mapping"] = mapping_mismatch == 0
+        details["source_demand_mapping_mismatches"] = mapping_mismatch
+        zero_mismatch = conn.execute("""
+            SELECT COUNT(*) FROM resource_features
+            WHERE download_count=0 AND source IN ('modrinth','hangar') AND demand_download_count != 0
+        """).fetchone()[0]
+        checks["recorded_zero_preserved"] = zero_mismatch == 0
+        details["recorded_zero_mismatches"] = zero_mismatch
+
+        percentile_extrema = {row[0]: (row[1], row[2]) for row in conn.execute("SELECT source, MIN(demand_percentile), MAX(demand_percentile) FROM resource_features GROUP BY source")}
+        checks["source_local_percentiles"] = all(0 <= low <= high <= 100 for low, high in percentile_extrema.values())
+        details["percentile_extrema"] = {source: {"min": low, "max": high} for source, (low, high) in sorted(percentile_extrema.items())}
+
+        source_facts = dict(conn.execute("SELECT source, resource_count FROM segment_facts WHERE lens='source'").fetchall())
+        checks["source_fact_reconciliation"] = source_facts == expected_counts and sum(source_facts.values()) == expected_total
+        details["source_fact_counts"] = dict(sorted(source_facts.items()))
+        price_counts = dict(conn.execute("SELECT bucket, resource_count FROM source_distributions WHERE distribution='price' AND source='voxel'").fetchall())
+        checks["voxel_price_bucket_reconciliation"] = price_counts.get("all") == expected_counts.get("voxel") and sum(price_counts.get(bucket, 0) for bucket in ("free", "paid", "unknown")) == expected_counts.get("voxel")
+        details["voxel_price_bucket_counts"] = price_counts
+        demand_dist = {row[0]: (row[1], row[2]) for row in conn.execute("SELECT source, resource_count, available_count FROM source_distributions WHERE distribution='demand'")}
+        checks["source_distribution_reconciliation"] = all(row[0] == expected_counts[source] for source, row in demand_dist.items()) and len(demand_dist) == len(expected_counts)
+        details["source_distribution_counts"] = {source: {"resource_count": row[0], "available_count": row[1]} for source, row in sorted(demand_dist.items())}
+        checks["cohort_boundary_semantics"] = (
+            age_cohort(90) == "<=90d" and age_cohort(91) == "91-365d" and age_cohort(365) == "91-365d"
+            and age_cohort(366) == "366-1095d" and age_cohort(1095) == "366-1095d" and age_cohort(1096) == ">1095d"
+            and freshness_cohort(30) == "<=30d" and freshness_cohort(31) == "31-90d"
+            and freshness_cohort(90) == "31-90d" and freshness_cohort(91) == "91-365d"
+            and freshness_cohort(365) == "91-365d" and freshness_cohort(366) == ">365d"
+        )
+        details["cohort_boundary_semantics"] = "tested"
+
+        with tempfile.TemporaryDirectory(prefix="yee29-export-check-", dir=output_dir) as temp_dir:
+            temp_paths: list[Path] = []
+            temp_conn = sqlite3.connect(f"file:{analysis_db.as_posix()}?mode=ro", uri=True)
+            try:
+                temp_paths += export_table(temp_conn, "resource_features", FEATURE_COLUMNS, Path(temp_dir), "resource_features", "source, source_resource_id")
+                temp_paths += export_table(temp_conn, "segment_facts", SEGMENT_COLUMNS, Path(temp_dir), "segment_facts", "lens, source, facet_value")
+                temp_paths += export_table(temp_conn, "source_distributions", DISTRIBUTION_COLUMNS, Path(temp_dir), "source_distributions", "distribution, source, metric, bucket")
+            finally:
+                temp_conn.close()
+            checks["deterministic_byte_identical_exports"] = all(sha256_file(actual) == sha256_file(rebuilt) for actual, rebuilt in zip(export_paths, temp_paths))
+        details["deterministic_byte_identical_exports"] = "re-exported and compared"
+    finally:
+        conn.close()
+
+    checks["canonical_input_unchanged"] = input_hash_before == input_hash_after
+    details["canonical_input_sha256_before"] = input_hash_before
+    details["canonical_input_sha256_after"] = input_hash_after
+    checks["canonical_input_counts"] = (
+        input_qa["resources_total"] == expected_total
+        and input_qa["snapshots_total"] == expected_total
+        and input_qa["voxel_enrichment_succeeded"] == expected_voxel_enrichment
+        and input_qa["voxel_enrichment_non_success"] == 0
+    )
+    details["canonical_input_counts"] = input_qa
+    return {"all_checks_pass": all(checks.values()), "checks": checks, "details": details}
+
+
 def run_pipeline(input_db: Path, output_dir: Path, analysis_as_of: str | None = None,
                  code_version: str = "working-tree", expected_counts: dict[str, int] = EXPECTED_SOURCE_COUNTS,
                  expected_voxel_enrichment: int = EXPECTED_VOXEL_ENRICHMENT) -> dict[str, Any]:
@@ -582,8 +681,15 @@ def run_pipeline(input_db: Path, output_dir: Path, analysis_as_of: str | None = 
         out_conn.close()
 
     input_hash_after = sha256_file(input_db)
+    schema_source = Path(__file__).resolve().parents[2] / "FEATURE_SCHEMA.md"
+    schema_path = output_dir / "FEATURE_SCHEMA.md"
+    if schema_source.exists():
+        shutil.copyfile(schema_source, schema_path)
+    else:
+        raise FileNotFoundError(f"missing schema artifact: {schema_source}")
+    qa_checks = _qa_checks(rows, input_qa, expected_counts, analysis_db, export_paths, output_dir, input_hash_before, input_hash_after, expected_voxel_enrichment)
     qa = {
-        "status": "PASS" if input_hash_before == input_hash_after and len(rows) == sum(expected_counts.values()) else "FAIL",
+        "status": "PASS" if qa_checks["all_checks_pass"] else "FAIL",
         "input": input_qa,
         "output": {"resource_features": len(rows), "segment_facts": len(segments), "source_distributions": len(distributions),
                    "source_counts": dict(sorted(Counter(row["source"] for row in rows).items()))},
@@ -595,10 +701,11 @@ def run_pipeline(input_db: Path, output_dir: Path, analysis_as_of: str | None = 
         "null_semantics": "missing values remain null in JSONL and \\N in CSV; recorded zero remains zero",
         "percentile_semantics": "source-local average rank, rounded to six decimals; nulls excluded",
         "facet_semantics": "multi-valued facets are membership counts, not mutually exclusive totals",
+        "full_qa": qa_checks,
         "non_goals_verified": ["no API calls", "no matching", "no embeddings", "no JEV/LLM", "no scoring", "no ranking", "no shortlist"],
     }
     _write_json(output_dir / "YEE-29_QA_RESULT.json", qa)
-    artifacts = [_artifact_info(analysis_db, output_dir)] + [_artifact_info(path, output_dir) for path in export_paths]
+    artifacts = [_artifact_info(analysis_db, output_dir), _artifact_info(schema_path, output_dir)] + [_artifact_info(path, output_dir) for path in export_paths]
     artifacts += [_artifact_info(output_dir / "YEE-29_QA_RESULT.json", output_dir)]
     manifest = {"status": qa["status"], "run_id": run_id, "analysis_as_of": analysis_as_of_iso,
                 "analysis_code_version": code_version, "feature_schema_version": SCHEMA_VERSION,
