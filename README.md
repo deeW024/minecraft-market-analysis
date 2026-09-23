@@ -43,3 +43,10 @@ YEE-30 does not make marketplace API calls or perform cross-market identity
 merge, embeddings, semantic clustering, JEV/LLM analysis, scoring, ranking,
 recommendation or YEE-31 work.
 
+## YEE-31 JEV triage harness
+
+The YEE-31 Jev-native `state + Choice/Score/Noul questions` transport,
+deterministic derived output, credential handling and fixture tests are
+documented in [YEE31_HARNESS.md](YEE31_HARNESS.md). No model-generated prose or
+free-form JSON is part of the production path. Live inference remains gated on
+an authorized runtime credential and an explicit pilot decision.
