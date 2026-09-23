@@ -7,6 +7,7 @@ name = "minecraft-market-analysis"
 version = "0.1.0"
 description = "Deterministic analytical feature layer for the BBB Market YEE-29 work order"
 requires-python = ">=3.11"
+dependencies = ["typesafe-sdk==0.7.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

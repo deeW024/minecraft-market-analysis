@@ -5,17 +5,20 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import sqlite3
+import threading
 import time
 import csv
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 from urllib.parse import urlsplit
+
+import httpx2
+from typesafe_sdk import RetryPolicy, TypeSafeClient
 
 
 QUESTION_SET_VERSION = "yee-31-native-questions-v0.2"
@@ -80,6 +83,21 @@ class ProviderResponse:
     request_id: str | None = None
 
 
+@dataclass(frozen=True)
+class RawEvidenceCapture:
+    """Persistence callbacks run at the HTTP transport boundary."""
+
+    before_dispatch: Callable[[bytes], None]
+    before_parse: Callable[[int, bytes, str | None], None]
+
+
+@dataclass(frozen=True)
+class _CapturedHTTPResponse:
+    status_code: int
+    raw_body: bytes
+    request_id: str | None
+
+
 class Reasoner(Protocol):
     provider_id: str
     model_identifier: str
@@ -87,7 +105,9 @@ class Reasoner(Protocol):
     transport_id: str
     transport_config: Mapping[str, Any]
 
-    def complete(self, request: InferenceRequest) -> ProviderResponse: ...
+    def complete(
+        self, request: InferenceRequest, capture: RawEvidenceCapture | None = None
+    ) -> ProviderResponse: ...
 
 
 class JEVProviderAdapter:
@@ -111,11 +131,19 @@ class JEVProviderAdapter:
         self.transport_id = transport_id
         self.transport_config = dict(transport_config)
 
-    def complete(self, request: InferenceRequest) -> ProviderResponse:
-        response = self._transport(request)
+    def complete(
+        self, request: InferenceRequest, capture: RawEvidenceCapture | None = None
+    ) -> ProviderResponse:
+        captured_call = getattr(self._transport, "complete_with_capture", None)
+        response = captured_call(request, capture) if capture is not None and callable(captured_call) else self._transport(request)
         if not isinstance(response, ProviderResponse) or not isinstance(response.raw_body, bytes):
             raise TypeError("JEV transport must return ProviderResponse with exact raw bytes")
         return response
+
+    def close(self) -> None:
+        close = getattr(self._transport, "close", None)
+        if callable(close):
+            close()
 
 
 class MissingCredentialError(RuntimeError):
@@ -123,11 +151,81 @@ class MissingCredentialError(RuntimeError):
 
 
 class JevTransportError(RuntimeError):
-    """A sanitized HTTP transport failure; it never includes headers or body."""
+    """An HTTP transport failure with credential-scrubbed, bounded error evidence."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        request_id: str | None = None,
+        error_body: str | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self.request_id = request_id
+        self.error_body = error_body
+        details = message
+        if status_code is not None:
+            details = f"{message} (status={status_code})"
+        if request_id:
+            details += f"; request_id={request_id}"
+        if error_body:
+            details += f"; sanitized_error_body={error_body[:2048]}"
+        super().__init__(details)
+
+
+class _EvidenceHTTPTransport(httpx2.BaseTransport):
+    """Capture SDK wire bytes before dispatch/parse without persisting headers."""
+
+    def __init__(self, inner: httpx2.BaseTransport, api_key: str) -> None:
+        self._inner = inner
+        self._credential = api_key.encode("utf-8")
+        self._capture: RawEvidenceCapture | None = None
+        self.last_response: _CapturedHTTPResponse | None = None
+        self.persistence_failure: str | None = None
+
+    def begin_call(self, capture: RawEvidenceCapture | None) -> None:
+        self._capture = capture
+        self.last_response = None
+        self.persistence_failure = None
+
+    def end_call(self) -> None:
+        self._capture = None
+
+    def handle_request(self, request: httpx2.Request) -> httpx2.Response:
+        request_body = bytes(request.content or b"")
+        if self._credential and self._credential in request_body:
+            self.persistence_failure = "request"
+            raise RuntimeError("request body contains a runtime credential")
+        if self._capture is not None:
+            try:
+                self._capture.before_dispatch(request_body)
+            except Exception:
+                self.persistence_failure = "request"
+                raise RuntimeError("request evidence could not be persisted before dispatch") from None
+
+        response = self._inner.handle_request(request)
+        response.read()
+        raw_response = bytes(response.content)
+        if self._credential:
+            raw_response = raw_response.replace(self._credential, b"[REDACTED]")
+        request_id = response.headers.get("x-typesafe-request-id")
+        captured = _CapturedHTTPResponse(response.status_code, raw_response, request_id)
+        self.last_response = captured
+        if self._capture is not None:
+            try:
+                self._capture.before_parse(captured.status_code, captured.raw_body, captured.request_id)
+            except Exception:
+                self.persistence_failure = "response"
+                raise RuntimeError("response evidence could not be persisted before SDK parsing") from None
+        return response
+
+    def close(self) -> None:
+        self._inner.close()
 
 
 class TypeSafeSystemOneHTTPTransport:
-    """Direct TypeSafe POST /v1/systemone transport."""
+    """Direct TypeSafe transport using the official Python SDK."""
 
     transport_id = "typesafe-systemone-http-v1"
 
@@ -136,21 +234,40 @@ class TypeSafeSystemOneHTTPTransport:
         api_key: str,
         base_url: str = DIRECT_BASE_URL,
         timeout: float = 30.0,
-        opener: Callable[..., Any] | None = None,
+        http_transport: httpx2.BaseTransport | None = None,
     ) -> None:
         if not api_key:
             raise MissingCredentialError("TYPESAFE_API_KEY is required at runtime")
-        self._api_key = api_key
         self.base_url = _validate_base_url(base_url)
         self.timeout = _validate_timeout(timeout)
-        self._opener = opener or urllib.request.urlopen
+        self._evidence_transport = _EvidenceHTTPTransport(http_transport or httpx2.HTTPTransport(), api_key)
+        self._http_client = httpx2.Client(transport=self._evidence_transport, timeout=self.timeout)
+        self._sdk_client = TypeSafeClient(
+            api_key=api_key,
+            model=DIRECT_MODEL,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            retry=RetryPolicy(max_retries=0),
+            http_client=self._http_client,
+        )
+        self._call_lock = threading.Lock()
 
-    def __call__(self, request: InferenceRequest) -> ProviderResponse:
-        return _post_systemone(self, request)
+    def __call__(
+        self, request: InferenceRequest, capture: RawEvidenceCapture | None = None
+    ) -> ProviderResponse:
+        return self.complete_with_capture(request, capture)
+
+    def complete_with_capture(
+        self, request: InferenceRequest, capture: RawEvidenceCapture | None
+    ) -> ProviderResponse:
+        return _complete_with_sdk(self, request, capture)
+
+    def close(self) -> None:
+        self._sdk_client.close()
 
 
 class VercelTypeSafeHTTPTransport:
-    """Vercel AI Gateway's TypeSafe-compatible /v1/systemone transport."""
+    """Vercel AI Gateway's TypeSafe-compatible transport using the official SDK."""
 
     transport_id = "vercel-typesafe-systemone-http-v1"
 
@@ -159,17 +276,36 @@ class VercelTypeSafeHTTPTransport:
         api_key: str,
         base_url: str = VERCEL_TYPESAFE_BASE_URL,
         timeout: float = 30.0,
-        opener: Callable[..., Any] | None = None,
+        http_transport: httpx2.BaseTransport | None = None,
     ) -> None:
         if not api_key:
             raise MissingCredentialError("AI_GATEWAY_API_KEY is required at runtime")
-        self._api_key = api_key
         self.base_url = _validate_base_url(base_url)
         self.timeout = _validate_timeout(timeout)
-        self._opener = opener or urllib.request.urlopen
+        self._evidence_transport = _EvidenceHTTPTransport(http_transport or httpx2.HTTPTransport(), api_key)
+        self._http_client = httpx2.Client(transport=self._evidence_transport, timeout=self.timeout)
+        self._sdk_client = TypeSafeClient(
+            api_key=api_key,
+            model=VERCEL_MODEL,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            retry=RetryPolicy(max_retries=0),
+            http_client=self._http_client,
+        )
+        self._call_lock = threading.Lock()
 
-    def __call__(self, request: InferenceRequest) -> ProviderResponse:
-        return _post_systemone(self, request)
+    def __call__(
+        self, request: InferenceRequest, capture: RawEvidenceCapture | None = None
+    ) -> ProviderResponse:
+        return self.complete_with_capture(request, capture)
+
+    def complete_with_capture(
+        self, request: InferenceRequest, capture: RawEvidenceCapture | None
+    ) -> ProviderResponse:
+        return _complete_with_sdk(self, request, capture)
+
+    def close(self) -> None:
+        self._sdk_client.close()
 
 
 def _validate_base_url(value: str) -> str:
@@ -186,33 +322,61 @@ def _validate_timeout(value: float) -> float:
     return timeout
 
 
-def _post_systemone(transport: Any, request: InferenceRequest) -> ProviderResponse:
-    endpoint = transport.base_url + "/v1/systemone"
-    http_request = urllib.request.Request(
-        endpoint,
-        data=request.body,
-        headers={
-            "Authorization": f"Bearer {transport._api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with transport._opener(http_request, timeout=transport.timeout) as response:
-            return ProviderResponse(
-                raw_body=response.read(),
-                request_id=response.headers.get("x-request-id"),
-            )
-    except urllib.error.HTTPError as exc:
-        raise JevTransportError(f"Jev HTTP request failed (status={exc.code})") from None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise JevTransportError("Jev HTTP request failed (connection or timeout)") from None
+def _complete_with_sdk(
+    transport: Any,
+    request: InferenceRequest,
+    capture: RawEvidenceCapture | None,
+) -> ProviderResponse:
+    with transport._call_lock:
+        transport._evidence_transport.begin_call(capture)
+        sdk_logger = logging.getLogger("typesafe_sdk")
+        was_disabled = sdk_logger.disabled
+        sdk_logger.disabled = True
+        try:
+            try:
+                transport._sdk_client.system_one(
+                    state=request.state,
+                    questions=request.questions,
+                    model=request.model_identifier,
+                    retry=RetryPolicy(max_retries=0),
+                    timeout=transport.timeout,
+                )
+            except Exception:
+                captured = transport._evidence_transport.last_response
+                if transport._evidence_transport.persistence_failure:
+                    stage = transport._evidence_transport.persistence_failure
+                    raise JevTransportError(f"{stage} evidence persistence failed") from None
+                if captured is not None and 200 <= captured.status_code < 300:
+                    return ProviderResponse(captured.raw_body, captured.request_id)
+                if captured is not None:
+                    error_body = captured.raw_body.decode("utf-8", errors="replace")
+                    raise JevTransportError(
+                        "Jev HTTP request failed",
+                        status_code=captured.status_code,
+                        request_id=captured.request_id,
+                        error_body=error_body or None,
+                    ) from None
+                raise JevTransportError("Jev HTTP request failed (connection or timeout)") from None
+            captured = transport._evidence_transport.last_response
+            if captured is None:
+                raise JevTransportError("Jev HTTP request completed without a captured response")
+            if not 200 <= captured.status_code < 300:
+                error_body = captured.raw_body.decode("utf-8", errors="replace")
+                raise JevTransportError(
+                    "Jev HTTP request failed",
+                    status_code=captured.status_code,
+                    request_id=captured.request_id,
+                    error_body=error_body or None,
+                )
+            return ProviderResponse(captured.raw_body, captured.request_id)
+        finally:
+            sdk_logger.disabled = was_disabled
+            transport._evidence_transport.end_call()
 
 
 def jev_provider_from_env(
     environ: Mapping[str, str] | None = None,
-    opener: Callable[..., Any] | None = None,
+    http_transport: httpx2.BaseTransport | None = None,
 ) -> JEVProviderAdapter:
     """Create a fail-closed direct or Vercel transport from runtime env only."""
     env = os.environ if environ is None else environ
@@ -227,7 +391,7 @@ def jev_provider_from_env(
             env.get("TYPESAFE_API_KEY", ""),
             env.get("TYPESAFE_BASE_URL", DIRECT_BASE_URL),
             timeout,
-            opener,
+            http_transport,
         )
     elif kind in {"vercel", "vercel-typesafe"}:
         model = VERCEL_MODEL
@@ -235,7 +399,7 @@ def jev_provider_from_env(
             env.get("AI_GATEWAY_API_KEY", ""),
             env.get("VERCEL_TYPESAFE_BASE_URL", VERCEL_TYPESAFE_BASE_URL),
             timeout,
-            opener,
+            http_transport,
         )
     else:
         raise ValueError("JEV_TRANSPORT must be 'typesafe' or 'vercel-typesafe'")
@@ -784,6 +948,9 @@ class TriageRunner:
 
     def close(self) -> None:
         self.connection.close()
+        close = getattr(self.provider, "close", None)
+        if callable(close):
+            close()
 
     def __enter__(self) -> "TriageRunner":
         return self
@@ -1027,8 +1194,29 @@ class TriageRunner:
                 (cache_key, attempts, request.body, request.request_sha256),
             )
             self.connection.execute("UPDATE candidate_runs SET status='running' WHERE cache_key=?", (cache_key,))
+
+            def persist_sdk_request(raw_body: bytes) -> None:
+                try:
+                    payload = json.loads(raw_body)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ValueError("SDK request bytes are not valid JSON") from exc
+                if payload != json.loads(request.body):
+                    raise ValueError("SDK request bytes differ from the deterministic request payload")
+                self.connection.execute(
+                    "UPDATE candidate_attempts SET request_body=?,request_sha256=? WHERE cache_key=? AND attempt_no=?",
+                    (raw_body, sha256_bytes(raw_body), cache_key, attempts),
+                )
+
+            def persist_sdk_response(status_code: int, raw_body: bytes, request_id: str | None) -> None:
+                self.connection.execute(
+                    "UPDATE candidate_attempts SET stage='raw_saved',raw_response=?,raw_response_sha256=?,request_id=? "
+                    "WHERE cache_key=? AND attempt_no=?",
+                    (raw_body, sha256_bytes(raw_body), request_id, cache_key, attempts),
+                )
+
+            capture = RawEvidenceCapture(persist_sdk_request, persist_sdk_response)
             try:
-                response = self.provider.complete(request)
+                response = self.provider.complete(request, capture)
                 if not isinstance(response, ProviderResponse) or not isinstance(response.raw_body, bytes):
                     raise TypeError("provider must return exact raw response bytes")
             except Exception as exc:
@@ -1054,7 +1242,14 @@ class TriageRunner:
                     attempts,
                 ),
             )
-            normalized = self._parse_saved_attempt(cache_key, attempts, response.raw_body, candidate, request.request_sha256)
+            attempt = self.connection.execute(
+                "SELECT request_sha256 FROM candidate_attempts WHERE cache_key=? AND attempt_no=?",
+                (cache_key, attempts),
+            ).fetchone()
+            saved_request_sha256 = attempt["request_sha256"] or request.request_sha256
+            normalized = self._parse_saved_attempt(
+                cache_key, attempts, response.raw_body, candidate, saved_request_sha256
+            )
             if normalized is not None:
                 return {"topic_key": topic_key, "cache_key": cache_key, "status": "completed", "normalized": normalized}
 

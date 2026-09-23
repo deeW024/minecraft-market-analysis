@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-import urllib.error
 from pathlib import Path
 
+import httpx2
 import pytest
+import typesafe_sdk._core.transport as sdk_transport
 
 from market_analysis.jev_triage import (
     DERIVED_OUTPUT_VERSION,
@@ -16,6 +17,7 @@ from market_analysis.jev_triage import (
     JEVProviderAdapter,
     MissingCredentialError,
     ProviderResponse,
+    RawEvidenceCapture,
     TriageRunner,
     TriageValidationError,
     TypeSafeSystemOneHTTPTransport,
@@ -127,7 +129,7 @@ class FixtureReasoner:
         self.responses = list(responses)
         self.requests = []
 
-    def complete(self, request):
+    def complete(self, request, capture=None):
         self.requests.append(request)
         response = self.responses.pop(0)
         if isinstance(response, Exception):
@@ -156,21 +158,6 @@ def _runner(tmp_path, reasoner, max_attempts=2, database="triage.db"):
         "inference_parameters": {},
     }
     return TriageRunner(tmp_path / database, reasoner, metadata, {}, max_attempts=max_attempts)
-
-
-class FakeHTTPResponse:
-    def __init__(self, body):
-        self._body = body
-        self.headers = {"x-request-id": "fixture-request-1"}
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        return None
-
-    def read(self):
-        return self._body
 
 
 def _fixture_request(model):
@@ -217,36 +204,84 @@ def test_native_questions_are_versioned_and_request_uses_only_state_and_typed_qu
         (VercelTypeSafeHTTPTransport, "typesafe-ai/jev", "https://ai-gateway.vercel.sh/typesafe", "systemone_response.vercel.json"),
     ],
 )
-def test_mocked_http_transport_request_response_fixtures(transport, model, base_url, response_fixture):
+def test_mocked_sdk_transport_request_response_fixtures(
+    transport, model, base_url, response_fixture, monkeypatch
+):
     response_body = (FIXTURES / response_fixture).read_bytes()
     captured = {}
+    events = []
 
-    def opener(request, timeout):
-        captured["url"] = request.full_url
-        captured["method"] = request.get_method()
-        captured["body"] = request.data
-        captured["authorization"] = request.get_header("Authorization")
-        captured["content_type"] = request.get_header("Content-type")
-        captured["timeout"] = timeout
-        return FakeHTTPResponse(response_body)
+    def handler(request):
+        events.append("dispatch")
+        assert events[0] == "request-persisted"
+        captured["url"] = str(request.url)
+        captured["method"] = request.method
+        captured["body"] = request.content
+        captured["authorization"] = request.headers.get("authorization")
+        captured["content_type"] = request.headers.get("content-type")
+        captured["user_agent"] = request.headers.get("user-agent")
+        captured["sdk_header"] = request.headers.get("x-typesafe-sdk")
+        captured["runtime_header"] = request.headers.get("x-typesafe-runtime")
+        return httpx2.Response(
+            200,
+            headers={"x-typesafe-request-id": "fixture-request-1"},
+            content=response_body,
+        )
 
-    client = transport(SECRET, base_url=base_url, timeout=4, opener=opener)
+    def before_dispatch(body):
+        events.append("request-persisted")
+        captured["persisted_request"] = body
+
+    def before_parse(status, body, request_id):
+        events.append("response-persisted")
+        captured["persisted_status"] = status
+        captured["persisted_response"] = body
+        captured["persisted_request_id"] = request_id
+
+    real_parse_response = sdk_transport.parse_response
+
+    def parse_response_spy(response, response_type):
+        events.append("sdk-parse")
+        return real_parse_response(response, response_type)
+
+    monkeypatch.setattr(sdk_transport, "parse_response", parse_response_spy)
+
+    client = transport(
+        SECRET,
+        base_url=base_url,
+        timeout=4,
+        http_transport=httpx2.MockTransport(handler),
+    )
     request = _fixture_request(model)
-    response = client(request)
-    expected_request = json.loads((FIXTURES / "systemone_request.json").read_text(encoding="utf-8"))
-    expected_request["model"] = model
-    assert captured["url"] == base_url + "/v1/systemone"
-    assert captured["method"] == "POST"
-    assert captured["body"] == canonical_json(expected_request).encode()
-    assert captured["authorization"] == f"Bearer {SECRET}"
-    assert SECRET.encode() not in captured["body"]
-    assert captured["content_type"] == "application/json"
-    assert captured["timeout"] == 4
-    assert response.raw_body == response_body
-    envelope = parse_response(response.raw_body, request.questions)
-    assert set(envelope["answers"]) == set(request.questions)
-    if "vercel" in response_fixture:
-        assert envelope["provider_metadata"]["gateway"]["routing"]["canonicalSlug"] == "typesafe-ai/jev"
+    try:
+        response = client(
+            request,
+            RawEvidenceCapture(before_dispatch, before_parse),
+        )
+        expected_request = json.loads((FIXTURES / "systemone_request.json").read_text(encoding="utf-8"))
+        expected_request["model"] = model
+        assert captured["url"] == base_url + "/v1/systemone"
+        assert captured["method"] == "POST"
+        assert json.loads(captured["body"]) == expected_request
+        assert captured["persisted_request"] == captured["body"]
+        assert captured["authorization"] == f"Bearer {SECRET}"
+        assert SECRET.encode() not in captured["persisted_request"]
+        assert captured["content_type"] == "application/json"
+        assert captured["user_agent"].startswith("typesafe-sdk/0.7.1")
+        assert captured["sdk_header"] == "typesafe-sdk/0.7.1"
+        assert captured["runtime_header"]
+        assert captured["persisted_status"] == 200
+        assert captured["persisted_response"] == response_body
+        assert captured["persisted_request_id"] == "fixture-request-1"
+        assert response.raw_body == response_body
+        assert response.request_id == "fixture-request-1"
+        assert events == ["request-persisted", "dispatch", "response-persisted", "sdk-parse"]
+        envelope = parse_response(response.raw_body, request.questions)
+        assert set(envelope["answers"]) == set(request.questions)
+        if "vercel" in response_fixture:
+            assert envelope["provider_metadata"]["gateway"]["routing"]["canonicalSlug"] == "typesafe-ai/jev"
+    finally:
+        client.close()
 
 
 def test_runtime_transport_selection_fails_closed_without_env_credentials():
@@ -256,10 +291,11 @@ def test_runtime_transport_selection_fails_closed_without_env_credentials():
         jev_provider_from_env({"JEV_TRANSPORT": "vercel-typesafe"})
     provider = jev_provider_from_env(
         {"JEV_TRANSPORT": "vercel-typesafe", "AI_GATEWAY_API_KEY": SECRET},
-        opener=lambda *_args, **_kwargs: None,
+        http_transport=httpx2.MockTransport(lambda _request: pytest.fail("unexpected network request")),
     )
     assert provider.transport_id == "vercel-typesafe-systemone-http-v1"
     assert SECRET not in canonical_json(provider.transport_config)
+    provider.close()
     with pytest.raises(ValueError, match="HTTPS"):
         TypeSafeSystemOneHTTPTransport("credential", "http://localhost")
 
@@ -383,23 +419,111 @@ def test_saved_raw_response_is_reparsed_on_resume_without_new_http_call(tmp_path
     assert no_call.requests == []
 
 
+def test_sdk_wire_bytes_are_persisted_before_dispatch_and_parse(tmp_path, monkeypatch):
+    candidate = _candidate()
+    response_body = canonical_json(_native_envelope(candidate)).encode("utf-8")
+    runner_ref = {}
+    dispatches = []
+
+    def handler(request):
+        runner = runner_ref["runner"]
+        cache_key = runner.connection.execute(
+            "SELECT cache_key FROM candidate_runs WHERE topic_key=?", (candidate["topic_key"],)
+        ).fetchone()[0]
+        row = runner.connection.execute(
+            "SELECT request_body,request_sha256 FROM candidate_attempts WHERE cache_key=? AND attempt_no=1",
+            (cache_key,),
+        ).fetchone()
+        assert row["request_body"] == request.content
+        assert row["request_sha256"] == sha256_bytes(request.content)
+        assert json.loads(row["request_body"])["state"] == candidate
+        dispatches.append(request)
+        return httpx2.Response(
+            200,
+            headers={"x-typesafe-request-id": "sdk-capture-success"},
+            content=response_body,
+        )
+
+    transport = TypeSafeSystemOneHTTPTransport(
+        SECRET,
+        http_transport=httpx2.MockTransport(handler),
+    )
+    provider = JEVProviderAdapter(
+        transport,
+        "jev-latest",
+        transport.transport_id,
+        {"base_url": transport.base_url, "timeout_seconds": transport.timeout},
+    )
+    real_parse_response = sdk_transport.parse_response
+
+    def parse_response_spy(response, response_type):
+        runner = runner_ref["runner"]
+        cache_key = runner.connection.execute(
+            "SELECT cache_key FROM candidate_runs WHERE topic_key=?", (candidate["topic_key"],)
+        ).fetchone()[0]
+        row = runner.connection.execute(
+            "SELECT stage,raw_response,raw_response_sha256,request_id FROM candidate_attempts "
+            "WHERE cache_key=? AND attempt_no=1",
+            (cache_key,),
+        ).fetchone()
+        assert row["stage"] == "raw_saved"
+        assert row["raw_response"] == response_body
+        assert row["raw_response_sha256"] == sha256_bytes(response_body)
+        assert row["request_id"] == "sdk-capture-success"
+        return real_parse_response(response, response_type)
+
+    monkeypatch.setattr(sdk_transport, "parse_response", parse_response_spy)
+    with _runner(tmp_path, provider, max_attempts=1) as runner:
+        runner_ref["runner"] = runner
+        result = runner.run_candidate(candidate)
+        row = runner.connection.execute("SELECT * FROM candidate_attempts").fetchone()
+
+    assert result["status"] == "completed"
+    assert len(dispatches) == 1
+    assert row["stage"] == "completed"
+    assert row["request_body"] == dispatches[0].content
+    payload = json.loads(row["request_body"])
+    assert payload["model"] == "jev-latest"
+    assert payload["state"] == candidate
+    assert payload["questions"] == load_contract()[0]
+    assert row["request_sha256"] == sha256_bytes(row["request_body"])
+    assert row["raw_response"] == response_body
+    assert row["request_id"] == "sdk-capture-success"
+    assert SECRET.encode() not in row["request_body"]
+    assert SECRET.encode() not in row["raw_response"]
+
+
 def test_transport_error_is_sanitized_before_sqlite_and_exports(tmp_path):
     candidate = _candidate()
-    http_error = urllib.error.HTTPError(
-        "https://api.typesafe.ai/v1/systemone", 401, f"denied {SECRET}", None, None
+    def handler(_request):
+        return httpx2.Response(
+            401,
+            headers={"x-typesafe-request-id": "sdk-error-id"},
+            json={"error": f"denied {SECRET}"},
+        )
+
+    transport = TypeSafeSystemOneHTTPTransport(
+        SECRET,
+        http_transport=httpx2.MockTransport(handler),
     )
-    transport = TypeSafeSystemOneHTTPTransport(SECRET, opener=lambda *_a, **_k: (_ for _ in ()).throw(http_error))
     provider = JEVProviderAdapter(transport, "jev-latest", transport.transport_id, {
         "base_url": transport.base_url, "timeout_seconds": transport.timeout,
     })
     with _runner(tmp_path, provider, max_attempts=1) as runner:
         failed = runner.run_candidate(candidate)
         exports = runner.export_payloads()
-        persisted = runner.connection.execute("SELECT error FROM candidate_attempts").fetchone()[0]
+        row = runner.connection.execute(
+            "SELECT error,request_body,raw_response,request_id,stage FROM candidate_attempts"
+        ).fetchone()
     assert failed["status"] == "failed"
     assert "status=401" in failed["error"]
     assert SECRET not in failed["error"]
-    assert SECRET not in persisted
+    assert "[REDACTED]" in failed["error"]
+    assert SECRET.encode() not in row["request_body"]
+    assert SECRET.encode() not in row["raw_response"]
+    assert "[REDACTED]" in row["raw_response"].decode("utf-8")
+    assert row["request_id"] == "sdk-error-id"
+    assert row["stage"] == "provider_error"
     assert SECRET not in exports["failed_pending.jsonl"]
 
 
