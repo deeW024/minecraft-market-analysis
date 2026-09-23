@@ -23,6 +23,7 @@ from typesafe_sdk import RetryPolicy, TypeSafeClient
 
 QUESTION_SET_VERSION = "yee-31-native-questions-v0.2"
 DERIVED_OUTPUT_VERSION = "yee-31-deterministic-output-v0.2"
+DECISION_POLICY_VERSION = "yee-31-topic-quality-policy-v1"
 EXPECTED_INPUT_COUNTS = {
     "resource_corpus": 169_007,
     "topic_source_facts": 8_095,
@@ -460,8 +461,22 @@ def _probability_map(value: Any, keys: set[str], name: str) -> None:
     numbers = list(value.values())
     if any(type(number) not in (int, float) or not math.isfinite(number) or not 0 <= number <= 1 for number in numbers):
         raise TriageValidationError(f"{name} probabilities must be finite values from 0 to 1")
-    if not math.isclose(sum(numbers), 1.0, rel_tol=0, abs_tol=1e-6):
-        raise TriageValidationError(f"{name} probabilities must sum to 1")
+
+
+def _probability_sum_deviations(answers: Mapping[str, Any]) -> dict[str, dict[str, float]]:
+    deviations = {}
+    for question_id, answer in answers.items():
+        probabilities = answer.get("probabilities") if isinstance(answer, Mapping) else None
+        if not isinstance(probabilities, Mapping):
+            continue
+        total = math.fsum(probabilities.values())
+        deviation = round(total - 1.0, 12)
+        if deviation:
+            deviations[question_id] = {
+                "sum": round(total, 12),
+                "deviation_from_one": deviation,
+            }
+    return dict(sorted(deviations.items()))
 
 
 def validate_response(value: Any, expected_questions: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -692,7 +707,7 @@ def evaluate_pilot_gates(
         if row.get("status") == "completed" and isinstance(row.get("normalized"), Mapping)
     ]
     valid_share = len(completed) / len(results) if results else 0.0
-    decisions = {row["normalized"].get("triage_decision", {}).get("choice") for row in completed}
+    decisions = {row["normalized"].get("policy_decision") for row in completed}
     audited = set(audited_topic_keys)
     completed_keys = {str(row.get("topic_key")) for row in completed}
     expected_question_ids = set(QUESTION_IDS)
@@ -720,7 +735,7 @@ def evaluate_pilot_gates(
         "manual_audit_at_least_30_and_covers_decisions": (
             len(audited) >= 30
             and audited.issubset(completed_keys)
-            and {row["normalized"].get("triage_decision", {}).get("choice") for row in completed if row.get("topic_key") in audited} >= decisions
+            and {row["normalized"].get("policy_decision") for row in completed if row.get("topic_key") in audited} >= decisions
         ),
     }
     return {
@@ -729,6 +744,10 @@ def evaluate_pilot_gates(
         "native_contract_valid_count": len(completed),
         "native_contract_valid_rate": round(valid_share, 6),
         "decision_counts": {
+            decision: sum(row["normalized"].get("policy_decision") == decision for row in completed)
+            for decision in ("ADVANCE", "HOLD", "REJECT")
+        },
+        "native_triage_decision_counts": {
             decision: sum(row["normalized"].get("triage_decision", {}).get("choice") == decision for row in completed)
             for decision in ("ADVANCE", "HOLD", "REJECT")
         },
@@ -859,15 +878,21 @@ def normalize_native_response(
     fact_summary, fact_references = _fact_summary(candidate)
     decision = answers["triage_decision"]
     quality = answers["topic_quality"]["choice"]
+    policy_decision = {
+        "coherent": "ADVANCE",
+        "ambiguous": "HOLD",
+        "generic_or_noise": "REJECT",
+    }[quality]
     scores = {
         question_id: answers[question_id]
         for question_id in ("semantic_alignment", "demand_signal_strength", "saturation_risk", "evidence_sufficiency")
     }
     paid_supply = answers["paid_supply_pattern"]["choice"]
     rationale = (
-        f"Jev's typed research-allocation judgment is {decision['choice']} "
+        f"Jev's native triage_decision diagnostic is {decision['choice']} "
         f"(confidence {float(decision['confidence']):.3f}; probabilities {canonical_json(decision['probabilities'])}). "
-        f"Topic quality is {quality}; semantic alignment is {_score_label(scores['semantic_alignment'])}; "
+        f"The deterministic policy_decision is {policy_decision} from topic_quality={quality}; "
+        f"semantic alignment is {_score_label(scores['semantic_alignment'])}; "
         f"source-relative demand strength is {_score_label(scores['demand_signal_strength'])}; "
         f"saturation risk is {_score_label(scores['saturation_risk'])}; evidence sufficiency is "
         f"{_score_label(scores['evidence_sufficiency'])}; paid-supply pattern is {paid_supply}. "
@@ -881,11 +906,14 @@ def normalize_native_response(
         "market_pattern": market_pattern,
         "summary": f"{concept_label} is a {candidate_class.replace('_', ' ')} candidate. YEE-30 facts: {fact_summary}.",
         "triage_decision": decision,
+        "policy_decision": policy_decision,
+        "decision_policy_version": DECISION_POLICY_VERSION,
         "topic_quality": answers["topic_quality"],
         "scores": scores,
         "paid_supply_pattern": answers["paid_supply_pattern"],
         "noul_answers": {key: answers[key] for key in QUESTION_IDS if answers[key]["type"] == "noul"},
         "typed_answers": answers,
+        "probability_sum_deviations": _probability_sum_deviations(answers),
         "rationale": rationale,
         "external_research_needed": answers["external_research_needed"]["noul"] >= 0.5,
         "external_research_questions": _research_question_templates(answers, concept_label),
@@ -1148,6 +1176,7 @@ class TriageRunner:
                 "UPDATE candidate_runs SET status='failed',last_error=? WHERE cache_key=?", (str(exc), cache_key)
             )
             return None
+        normalized["raw_evidence"]["selected_attempt_no"] = attempt_no
         normalized_json = canonical_json(normalized)
         self.connection.execute(
             "UPDATE candidate_attempts SET stage='completed',usage_json=?,parsed_at_ns=? WHERE cache_key=? AND attempt_no=?",
@@ -1158,6 +1187,125 @@ class TriageRunner:
             (normalized_json, cache_key),
         )
         return normalized
+
+    def replay_saved_attempts(self) -> dict[str, Any]:
+        """Reparse stored HTTP responses in original order without calling the provider."""
+        runs = self.connection.execute(
+            "SELECT r.*,t.candidate_json,MIN(a.rowid) AS first_saved_order "
+            "FROM candidate_runs r JOIN candidate_targets t ON t.topic_key=r.topic_key "
+            "LEFT JOIN candidate_attempts a ON a.cache_key=r.cache_key "
+            "WHERE r.replicate_id IS NULL GROUP BY r.cache_key "
+            "ORDER BY first_saved_order,r.topic_key"
+        ).fetchall()
+        if not runs:
+            return {"results": [], "attempts": []}
+
+        run_by_key = {row["cache_key"]: row for row in runs}
+        results = {
+            row["cache_key"]: {
+                "topic_key": row["topic_key"],
+                "cache_key": row["cache_key"],
+                "status": "failed",
+                "normalized": None,
+                "error": None,
+                "selected_attempt_no": None,
+            }
+            for row in runs
+        }
+        selected: set[str] = set()
+        last_errors: dict[str, str] = {}
+        replay_attempts: list[dict[str, Any]] = []
+
+        self.connection.execute("BEGIN")
+        try:
+            for cache_key in run_by_key:
+                self.connection.execute(
+                    "UPDATE candidate_runs SET status='pending',normalized_json=NULL,last_error=NULL WHERE cache_key=?",
+                    (cache_key,),
+                )
+            attempts = self.connection.execute(
+                "SELECT a.rowid AS saved_order,a.cache_key,a.attempt_no,a.raw_response,a.raw_response_sha256,"
+                "a.request_sha256,a.request_id,r.topic_key,r.input_sha256,r.question_set_sha256 "
+                "FROM candidate_attempts a JOIN candidate_runs r ON r.cache_key=a.cache_key "
+                "WHERE r.replicate_id IS NULL ORDER BY a.rowid"
+            ).fetchall()
+            for attempt in attempts:
+                record = {
+                    "saved_order": attempt["saved_order"],
+                    "topic_key": attempt["topic_key"],
+                    "attempt_no": attempt["attempt_no"],
+                    "request_id": attempt["request_id"],
+                    "response_sha256": attempt["raw_response_sha256"],
+                }
+                raw_response = attempt["raw_response"]
+                if raw_response is None:
+                    error = "saved attempt has no raw response body"
+                    record.update({"validation_status": "missing_raw_response", "error": error})
+                    last_errors[attempt["cache_key"]] = error
+                    replay_attempts.append(record)
+                    continue
+                try:
+                    envelope = parse_response(raw_response, self.questions)
+                except TriageValidationError as exc:
+                    error = str(exc)
+                    record.update({"validation_status": "invalid", "error": error})
+                    last_errors[attempt["cache_key"]] = error
+                    replay_attempts.append(record)
+                    continue
+
+                deviations = _probability_sum_deviations(envelope["answers"])
+                record.update({
+                    "validation_status": "valid_not_selected" if attempt["cache_key"] in selected else "selected",
+                    "probability_sum_deviations": deviations,
+                })
+                replay_attempts.append(record)
+                if attempt["cache_key"] in selected:
+                    continue
+
+                run = run_by_key[attempt["cache_key"]]
+                candidate = json.loads(run["candidate_json"])
+                normalized = normalize_native_response(
+                    envelope,
+                    candidate,
+                    self.provider,
+                    attempt["input_sha256"],
+                    attempt["question_set_sha256"],
+                    attempt["request_sha256"] or "",
+                    attempt["raw_response_sha256"] or sha256_bytes(raw_response),
+                )
+                normalized["raw_evidence"]["selected_attempt_no"] = attempt["attempt_no"]
+                normalized_json = canonical_json(normalized)
+                self.connection.execute(
+                    "UPDATE candidate_runs SET status='completed',normalized_json=?,last_error=NULL WHERE cache_key=?",
+                    (normalized_json, attempt["cache_key"]),
+                )
+                result = results[attempt["cache_key"]]
+                result.update({
+                    "status": "completed",
+                    "normalized": normalized,
+                    "error": None,
+                    "selected_attempt_no": attempt["attempt_no"],
+                })
+                selected.add(attempt["cache_key"])
+
+            for cache_key, result in results.items():
+                if cache_key in selected:
+                    continue
+                error = last_errors.get(cache_key, "no saved raw response was available")
+                self.connection.execute(
+                    "UPDATE candidate_runs SET status='failed',normalized_json=NULL,last_error=? WHERE cache_key=?",
+                    (error, cache_key),
+                )
+                result["error"] = error
+            self.connection.commit()
+        except Exception:
+            self.connection.rollback()
+            raise
+
+        return {
+            "results": [results[row["cache_key"]] for row in runs],
+            "attempts": replay_attempts,
+        }
 
     def run_candidate(self, candidate: Mapping[str, Any], replicate_id: str | None = None) -> dict[str, Any]:
         candidate_json = _candidate_json(candidate)
@@ -1356,12 +1504,20 @@ class TriageRunner:
             result = json.loads(run["normalized_json"])
             record = {"topic_key": target["topic_key"], "cache_key": cache_key, "triage": result}
             partitions["candidate_triage"].append(record)
-            partitions[result["triage_decision"]["choice"]].append(record)
+            partitions[result["policy_decision"]].append(record)
         exports = {
             f"{name}.jsonl": "".join(canonical_json(record) + "\n" for record in rows)
             for name, rows in partitions.items()
         }
-        csv_fields = ("topic_key", "cache_key", "status", "decision", "triage_json", "error")
+        csv_fields = (
+            "topic_key",
+            "cache_key",
+            "status",
+            "policy_decision",
+            "native_triage_decision",
+            "triage_json",
+            "error",
+        )
         for name, rows in partitions.items():
             output = io.StringIO(newline="")
             writer = csv.DictWriter(output, fieldnames=csv_fields, lineterminator="\n")
@@ -1372,7 +1528,8 @@ class TriageRunner:
                     "topic_key": record["topic_key"],
                     "cache_key": record["cache_key"],
                     "status": record.get("status", "completed"),
-                    "decision": triage.get("triage_decision", {}).get("choice", "") if triage else "",
+                    "policy_decision": triage.get("policy_decision", "") if triage else "",
+                    "native_triage_decision": triage.get("triage_decision", {}).get("choice", "") if triage else "",
                     "triage_json": canonical_json(triage) if triage else "",
                     "error": record.get("error") or "",
                 })

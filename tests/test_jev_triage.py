@@ -118,6 +118,16 @@ def _native_envelope(candidate, decision="ADVANCE", *, model="jev-1.13.0", noul_
     }
 
 
+def _set_choice(envelope, question_id, choice):
+    answer = envelope["answers"][question_id]
+    labels = list(answer["probabilities"])
+    answer["choice"] = choice
+    answer["probabilities"] = {
+        label: (0.7 if label == choice else 0.3 / (len(labels) - 1))
+        for label in labels
+    }
+
+
 class FixtureReasoner:
     provider_id = "JEV"
     model_identifier = "jev-latest"
@@ -193,7 +203,8 @@ def test_native_questions_are_versioned_and_request_uses_only_state_and_typed_qu
     assert result["status"] == "completed"
     assert result["normalized"]["concept_label"] == "Skyblock tool"
     assert result["normalized"]["typed_answers"] == _native_envelope(_candidate())["answers"]
-    assert "Jev's typed research-allocation judgment" in result["normalized"]["rationale"]
+    assert "native triage_decision diagnostic" in result["normalized"]["rationale"]
+    assert result["normalized"]["policy_decision"] == "ADVANCE"
     assert result["normalized"]["external_research_questions"] == []
 
 
@@ -316,6 +327,24 @@ def test_response_contract_rejects_old_freeform_shape_unknown_ids_and_bad_types(
         parse_response(b'{"concept_label":"generated prose"}', questions)
     with pytest.raises(TriageValidationError, match="duplicate JSON key"):
         parse_response(b'{"model":"a","model":"b","answers":{}}', questions)
+
+
+def test_probability_rounding_is_nonfatal_and_raw_values_are_preserved():
+    candidate = _candidate()
+    envelope = _native_envelope(candidate)
+    raw_probabilities = {"0": 0.01, "1": 0.05, "2": 0.12, "3": 0.47, "4": 0.34}
+    envelope["answers"]["demand_signal_strength"]["probabilities"] = raw_probabilities
+    questions, question_hash = load_contract()
+    parsed = parse_response(canonical_json(envelope).encode(), questions)
+    normalized = normalize_native_response(
+        parsed, candidate, FixtureReasoner([]), "a" * 64, question_hash, "b" * 64, "c" * 64
+    )
+    assert parsed["answers"]["demand_signal_strength"]["probabilities"] == raw_probabilities
+    assert normalized["typed_answers"]["demand_signal_strength"]["probabilities"] == raw_probabilities
+    assert normalized["probability_sum_deviations"]["demand_signal_strength"] == {
+        "sum": 0.99,
+        "deviation_from_one": -0.01,
+    }
 
 
 def test_native_answers_preserve_choice_score_noul_probabilities_usage_and_derive_templates():
@@ -567,10 +596,15 @@ def test_pilot_and_stability_samples_remain_deterministic_and_stratified():
     assert stability == select_stability_subset(list(reversed(pilot)), 60)
 
 
-def test_decision_exports_remain_partitioned_sorted_and_byte_deterministic(tmp_path):
+def test_policy_decision_drives_exports_not_native_diagnostic(tmp_path):
     candidates = [_candidate(key) for key in ("zeta", "alpha", "mu")]
-    decisions = {"alpha": "HOLD", "mu": "REJECT", "zeta": "ADVANCE"}
-    reasoner = FixtureReasoner([_native_envelope(item, decisions[item["topic_key"]]) for item in candidates])
+    policy = {"alpha": ("generic_or_noise", "REJECT"), "mu": ("ambiguous", "HOLD"), "zeta": ("coherent", "ADVANCE")}
+    responses = []
+    for item in candidates:
+        envelope = _native_envelope(item, "ADVANCE")
+        _set_choice(envelope, "topic_quality", policy[item["topic_key"]][0])
+        responses.append(envelope)
+    reasoner = FixtureReasoner(responses)
     with _runner(tmp_path, reasoner) as runner:
         runner.register_targets(list(reversed(candidates)))
         for candidate in candidates:
@@ -580,12 +614,66 @@ def test_decision_exports_remain_partitioned_sorted_and_byte_deterministic(tmp_p
     assert first == second
     rows = [json.loads(line) for line in first["candidate_triage.jsonl"].splitlines()]
     assert [row["topic_key"] for row in rows] == ["alpha", "mu", "zeta"]
-    assert [row["triage"]["triage_decision"]["choice"] for row in rows] == ["HOLD", "REJECT", "ADVANCE"]
+    assert [row["triage"]["triage_decision"]["choice"] for row in rows] == ["ADVANCE"] * 3
+    assert [row["triage"]["policy_decision"] for row in rows] == ["REJECT", "HOLD", "ADVANCE"]
     assert len(first["ADVANCE.jsonl"].splitlines()) == 1
     assert len(first["HOLD.jsonl"].splitlines()) == 1
     assert len(first["REJECT.jsonl"].splitlines()) == 1
     assert first["failed_pending.jsonl"] == ""
     assert first["candidate_triage.csv"] == second["candidate_triage.csv"]
+    assert "policy_decision,native_triage_decision" in first["candidate_triage.csv"].splitlines()[0]
+
+
+def test_offline_replay_selects_first_new_parser_valid_saved_attempt_without_network(tmp_path):
+    candidate = _candidate("rounding-replay")
+    first = _native_envelope(candidate, "REJECT")
+    first["answers"]["demand_signal_strength"]["probabilities"] = {
+        "0": 0.01, "1": 0.05, "2": 0.12, "3": 0.47, "4": 0.34,
+    }
+    _set_choice(first, "topic_quality", "coherent")
+    second = _native_envelope(candidate, "HOLD")
+    _set_choice(second, "topic_quality", "ambiguous")
+    reasoner = FixtureReasoner([])
+    first_raw = canonical_json(first).encode()
+    second_raw = canonical_json(second).encode()
+
+    with _runner(tmp_path, reasoner, database="replay.db") as runner:
+        runner.register_targets([candidate])
+        cache_key = runner.connection.execute(
+            "SELECT cache_key FROM candidate_runs WHERE topic_key=?", (candidate["topic_key"],)
+        ).fetchone()[0]
+        request = runner._request(
+            candidate, canonical_json(candidate), cache_key,
+            runner.connection.execute("SELECT input_sha256 FROM candidate_runs WHERE cache_key=?", (cache_key,)).fetchone()[0],
+            runner._question_set_sha256(), None,
+        )
+        runner.connection.execute("UPDATE candidate_runs SET status='failed',last_error='old parser' WHERE cache_key=?", (cache_key,))
+        for attempt_no, raw in ((1, first_raw), (2, second_raw)):
+            runner.connection.execute(
+                "INSERT INTO candidate_attempts(cache_key,attempt_no,stage,request_body,request_sha256,raw_response,raw_response_sha256) "
+                "VALUES (?,?,'parse_error',?,?,?,?)",
+                (cache_key, attempt_no, request.body, request.request_sha256, raw, sha256_bytes(raw)),
+            )
+        before = [tuple(row) for row in runner.connection.execute(
+            "SELECT attempt_no,stage,raw_response,raw_response_sha256 FROM candidate_attempts ORDER BY attempt_no"
+        )]
+        replay = runner.replay_saved_attempts()
+        again = runner.replay_saved_attempts()
+        normalized = replay["results"][0]["normalized"]
+        after = [tuple(row) for row in runner.connection.execute(
+            "SELECT attempt_no,stage,raw_response,raw_response_sha256 FROM candidate_attempts ORDER BY attempt_no"
+        )]
+
+    assert reasoner.requests == []
+    assert replay == again
+    assert replay["results"][0]["status"] == "completed"
+    assert normalized["raw_evidence"]["selected_attempt_no"] == 1
+    assert normalized["raw_evidence"]["response_sha256"] == sha256_bytes(first_raw)
+    assert normalized["triage_decision"]["choice"] == "REJECT"
+    assert normalized["policy_decision"] == "ADVANCE"
+    assert normalized["typed_answers"]["demand_signal_strength"]["probabilities"] == first["answers"]["demand_signal_strength"]["probabilities"]
+    assert [attempt["validation_status"] for attempt in replay["attempts"]] == ["selected", "valid_not_selected"]
+    assert before == after
 
 
 def test_pilot_native_contract_gates_and_full_run_hard_gate(tmp_path):
@@ -602,6 +690,8 @@ def test_pilot_native_contract_gates_and_full_run_hard_gate(tmp_path):
         rows.append({"topic_key": candidate["topic_key"], "status": "completed", "normalized": normalized})
     report = evaluate_pilot_gates(rows, [row["topic_key"] for row in rows[:30]], 0)
     assert report["status"] == "PASS"
+    assert report["decision_counts"] == {"ADVANCE": 120, "HOLD": 0, "REJECT": 0}
+    assert report["native_triage_decision_counts"] == {"ADVANCE": 40, "HOLD": 40, "REJECT": 40}
     require_pilot_pass(report)
     invalid = evaluate_pilot_gates(rows[:-1], [row["topic_key"] for row in rows[:30]], 0)
     assert invalid["status"] == "FAIL"
