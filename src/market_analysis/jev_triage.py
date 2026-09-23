@@ -1450,6 +1450,14 @@ class TriageRunner:
             question_id: {"adjacent_changed_pairs": 0, "adjacent_compared_pairs": 0}
             for question_id in QUESTION_IDS
         }
+        probability_deltas = {
+            question_id: {"adjacent_changed_pairs": 0, "adjacent_compared_pairs": 0}
+            for question_id in QUESTION_IDS
+        }
+        confidence_deltas = {
+            question_id: {"adjacent_changed_pairs": 0, "adjacent_compared_pairs": 0}
+            for question_id in QUESTION_IDS
+        }
         for runs in outcomes.values():
             decisions = [
                 run["normalized"]["policy_decision"]
@@ -1478,9 +1486,20 @@ class TriageRunner:
                     first_answers = first["normalized"]["typed_answers"]
                     second_answers = second["normalized"]["typed_answers"]
                     for question_id in QUESTION_IDS:
+                        first_answer = first_answers[question_id]
+                        second_answer = second_answers[question_id]
+                        value_key = {"choice": "choice", "score": "score", "noul": "noul"}[first_answer["type"]]
                         question_deltas[question_id]["adjacent_compared_pairs"] += 1
-                        if canonical_json(first_answers[question_id]) != canonical_json(second_answers[question_id]):
+                        if first_answer[value_key] != second_answer[value_key]:
                             question_deltas[question_id]["adjacent_changed_pairs"] += 1
+                        if "probabilities" in first_answer and "probabilities" in second_answer:
+                            probability_deltas[question_id]["adjacent_compared_pairs"] += 1
+                            if canonical_json(first_answer["probabilities"]) != canonical_json(second_answer["probabilities"]):
+                                probability_deltas[question_id]["adjacent_changed_pairs"] += 1
+                        if "confidence" in first_answer and "confidence" in second_answer:
+                            confidence_deltas[question_id]["adjacent_compared_pairs"] += 1
+                            if first_answer["confidence"] != second_answer["confidence"]:
+                                confidence_deltas[question_id]["adjacent_changed_pairs"] += 1
         return {
             "status": "COMPLETE" if all(run["status"] == "completed" for runs in outcomes.values() for run in runs) else "INCOMPLETE",
             "candidate_count": len(subset),
@@ -1492,6 +1511,8 @@ class TriageRunner:
             "native_triage_decision_exact_agreement_rate": round(native_agreement_count / len(subset), 6) if subset else 0.0,
             "native_triage_decision_adjacent_patterns": dict(sorted(native_adjacent.items())),
             "per_question_answer_deltas": question_deltas,
+            "per_question_probability_deltas": probability_deltas,
+            "per_question_confidence_deltas": confidence_deltas,
             "outcomes": outcomes,
         }
 

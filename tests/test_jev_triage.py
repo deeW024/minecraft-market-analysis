@@ -764,3 +764,36 @@ def test_stability_authority_follows_policy_when_native_triage_stays_advance(tmp
     assert report["per_question_answer_deltas"]["triage_decision"]["adjacent_changed_pairs"] == 0
     assert report["per_question_answer_deltas"]["topic_quality"]["adjacent_changed_pairs"] == 2
     assert report["per_question_answer_deltas"]["topic_quality"]["adjacent_compared_pairs"] == 120
+
+
+def test_stability_choice_delta_ignores_probability_and_confidence_drift(tmp_path):
+    pilot = [_candidate(f"typed-delta-{index:02d}") for index in range(60)]
+    responses = []
+    for index, candidate in enumerate(select_stability_subset(pilot, 60)):
+        for replicate in range(3):
+            envelope = _native_envelope(candidate, "ADVANCE")
+            if index == 0:
+                answer = envelope["answers"]["triage_decision"]
+                answer["confidence"] = (0.9, 0.8, 0.7)[replicate]
+                answer["probabilities"] = (
+                    {"ADVANCE": 0.8, "HOLD": 0.1, "REJECT": 0.1},
+                    {"ADVANCE": 0.7, "HOLD": 0.2, "REJECT": 0.1},
+                    {"ADVANCE": 0.6, "HOLD": 0.2, "REJECT": 0.2},
+                )[replicate]
+            responses.append(envelope)
+
+    with _runner(tmp_path, FixtureReasoner(responses), max_attempts=1) as runner:
+        report = runner.stability_audit(pilot)
+
+    assert report["per_question_answer_deltas"]["triage_decision"] == {
+        "adjacent_changed_pairs": 0,
+        "adjacent_compared_pairs": 120,
+    }
+    assert report["per_question_probability_deltas"]["triage_decision"] == {
+        "adjacent_changed_pairs": 2,
+        "adjacent_compared_pairs": 120,
+    }
+    assert report["per_question_confidence_deltas"]["triage_decision"] == {
+        "adjacent_changed_pairs": 2,
+        "adjacent_compared_pairs": 120,
+    }
