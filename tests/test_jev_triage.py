@@ -715,10 +715,52 @@ def test_stability_audit_keeps_three_replicates_and_per_question_deltas(tmp_path
     assert report["status"] == "COMPLETE"
     assert report["candidate_count"] == 60
     assert report["runs_per_candidate"] == 3
-    assert report["exact_decision_agreement_count"] == 59
-    assert report["adjacent_disagreement_patterns"]["ADVANCE->HOLD"] == 1
+    assert report["exact_decision_agreement_count"] == 60
+    assert report["adjacent_disagreement_patterns"] == {"ADVANCE->ADVANCE": 120}
+    assert report["native_triage_decision_exact_agreement_count"] == 59
+    assert report["native_triage_decision_adjacent_patterns"] == {
+        "ADVANCE->HOLD": 1,
+        "HOLD->ADVANCE": 1,
+        "REJECT->REJECT": 118,
+    }
     assert report["per_question_answer_deltas"]["triage_decision"]["adjacent_changed_pairs"] == 2
     assert report["per_question_answer_deltas"]["topic_quality"]["adjacent_compared_pairs"] == 120
     assert repeated["outcomes"] == report["outcomes"]
     assert call_count == 180
     assert len(reasoner.requests) == call_count
+
+
+def test_stability_authority_follows_policy_when_native_triage_stays_advance(tmp_path):
+    pilot = [_candidate(f"policy-stability-{index:02d}") for index in range(60)]
+    subset = select_stability_subset(pilot, 60)
+    responses = []
+    for index, candidate in enumerate(subset):
+        qualities = ("coherent", "ambiguous", "coherent") if index == 0 else ("coherent",) * 3
+        for quality in qualities:
+            envelope = _native_envelope(candidate, "ADVANCE")
+            _set_choice(envelope, "topic_quality", quality)
+            responses.append(envelope)
+
+    reasoner = FixtureReasoner(responses)
+    with _runner(tmp_path, reasoner, max_attempts=1) as runner:
+        report = runner.stability_audit(pilot)
+
+    assert report["status"] == "COMPLETE"
+    assert report["exact_decision_agreement_count"] == 59
+    assert report["exact_decision_agreement_rate"] == pytest.approx(59 / 60)
+    assert report["adjacent_disagreement_patterns"] == {
+        "ADVANCE->ADVANCE": 118,
+        "ADVANCE->HOLD": 1,
+        "HOLD->ADVANCE": 1,
+    }
+    assert report["native_triage_decision_exact_agreement_count"] == 60
+    assert report["native_triage_decision_exact_agreement_rate"] == 1.0
+    assert report["native_triage_decision_adjacent_patterns"] == {"ADVANCE->ADVANCE": 120}
+    assert report["outcomes"][subset[0]["topic_key"]][0]["normalized"]["triage_decision"]["choice"] == "ADVANCE"
+    assert [
+        run["normalized"]["policy_decision"]
+        for run in report["outcomes"][subset[0]["topic_key"]]
+    ] == ["ADVANCE", "HOLD", "ADVANCE"]
+    assert report["per_question_answer_deltas"]["triage_decision"]["adjacent_changed_pairs"] == 0
+    assert report["per_question_answer_deltas"]["topic_quality"]["adjacent_changed_pairs"] == 2
+    assert report["per_question_answer_deltas"]["topic_quality"]["adjacent_compared_pairs"] == 120

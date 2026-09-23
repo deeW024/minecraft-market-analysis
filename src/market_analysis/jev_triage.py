@@ -1443,25 +1443,38 @@ class TriageRunner:
                 for replicate in range(1, repetitions + 1)
             ]
         agreement_count = 0
+        native_agreement_count = 0
         adjacent: dict[str, int] = {}
+        native_adjacent: dict[str, int] = {}
         question_deltas = {
             question_id: {"adjacent_changed_pairs": 0, "adjacent_compared_pairs": 0}
             for question_id in QUESTION_IDS
         }
         for runs in outcomes.values():
             decisions = [
-                run["normalized"]["triage_decision"]["choice"]
+                run["normalized"]["policy_decision"]
                 for run in runs if run["status"] == "completed"
             ]
             if len(decisions) == repetitions and len(set(decisions)) == 1:
                 agreement_count += 1
+            native_decisions = [
+                run["normalized"]["triage_decision"]["choice"]
+                for run in runs if run["status"] == "completed"
+            ]
+            if len(native_decisions) == repetitions and len(set(native_decisions)) == 1:
+                native_agreement_count += 1
             for first, second in zip(runs, runs[1:]):
                 if first["status"] == second["status"] == "completed":
                     pair = (
+                        f"{first['normalized']['policy_decision']}->"
+                        f"{second['normalized']['policy_decision']}"
+                    )
+                    adjacent[pair] = adjacent.get(pair, 0) + 1
+                    native_pair = (
                         f"{first['normalized']['triage_decision']['choice']}->"
                         f"{second['normalized']['triage_decision']['choice']}"
                     )
-                    adjacent[pair] = adjacent.get(pair, 0) + 1
+                    native_adjacent[native_pair] = native_adjacent.get(native_pair, 0) + 1
                     first_answers = first["normalized"]["typed_answers"]
                     second_answers = second["normalized"]["typed_answers"]
                     for question_id in QUESTION_IDS:
@@ -1475,6 +1488,9 @@ class TriageRunner:
             "exact_decision_agreement_count": agreement_count,
             "exact_decision_agreement_rate": round(agreement_count / len(subset), 6) if subset else 0.0,
             "adjacent_disagreement_patterns": dict(sorted(adjacent.items())),
+            "native_triage_decision_exact_agreement_count": native_agreement_count,
+            "native_triage_decision_exact_agreement_rate": round(native_agreement_count / len(subset), 6) if subset else 0.0,
+            "native_triage_decision_adjacent_patterns": dict(sorted(native_adjacent.items())),
             "per_question_answer_deltas": question_deltas,
             "outcomes": outcomes,
         }
