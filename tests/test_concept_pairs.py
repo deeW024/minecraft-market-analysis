@@ -4,7 +4,10 @@ from collections import Counter
 import pytest
 
 import market_analysis.concept_pairs as pairs_module
-from market_analysis.concept_pairs_cli import _assert_terminal_outcomes
+from market_analysis.concept_pairs_cli import (
+    _assert_terminal_outcomes,
+    _reuse_persisted_run_metadata,
+)
 from market_analysis.concept_pairs import (
     EXPECTED_MODEL_ALIAS,
     EXPECTED_MODEL_VERSION,
@@ -36,6 +39,31 @@ def test_offline_finalize_accepts_terminal_failures_but_rejects_running_rows():
     )
     with pytest.raises(RuntimeError, match="nonterminal pilot outcomes"):
         _assert_terminal_outcomes([{"status": "running"}], "pilot")
+
+
+def test_offline_finalize_reuses_verified_run_identity_across_finalizer_commits(tmp_path):
+    persisted_basis = {
+        "code_commit": "inference-commit",
+        "accepted_input_sha256": "a" * 64,
+        "model_version": "jev-1.13.0",
+    }
+    metadata = {
+        **persisted_basis,
+        "run_id": sha256_bytes(canonical_json(persisted_basis).encode("utf-8")),
+    }
+    path = tmp_path / "RUN_METADATA.json"
+    path.write_text(canonical_json(metadata) + "\n", encoding="utf-8")
+
+    replayed = _reuse_persisted_run_metadata(
+        path,
+        {**persisted_basis, "code_commit": "finalizer-commit"},
+    )
+    assert replayed == metadata
+    with pytest.raises(RuntimeError, match="inputs differ"):
+        _reuse_persisted_run_metadata(
+            path,
+            {**persisted_basis, "code_commit": "finalizer-commit", "accepted_input_sha256": "b" * 64},
+        )
 
 
 def _topic(topic_key, identities=(), candidate_class="overlap", sources=None):

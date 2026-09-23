@@ -75,6 +75,28 @@ def _write_rebuilt_json(path: Path, value: Mapping[str, Any]) -> None:
     _write_rebuilt(path, (canonical_json(value) + "\n").encode("utf-8"))
 
 
+def _reuse_persisted_run_metadata(
+    path: Path,
+    current_run_basis: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not path.is_file():
+        raise RuntimeError("offline finalize requires persisted run metadata")
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    if any(key not in stored for key in current_run_basis):
+        raise RuntimeError("persisted run metadata is incomplete")
+    stored_basis = {key: stored[key] for key in current_run_basis}
+    stored_run_id = sha256_bytes(canonical_json(stored_basis).encode("utf-8"))
+    if stored.get("run_id") != stored_run_id:
+        raise RuntimeError("persisted run metadata identity is invalid")
+    comparable_stored = {key: value for key, value in stored_basis.items() if key != "code_commit"}
+    comparable_current = {
+        key: value for key, value in current_run_basis.items() if key != "code_commit"
+    }
+    if comparable_stored != comparable_current:
+        raise RuntimeError("offline finalize inputs differ from persisted run identity")
+    return stored
+
+
 def _write_jsonl(path: Path, rows: list[Mapping[str, Any]], *, rebuild: bool = False) -> None:
     writer = _write_rebuilt if rebuild else _write_generated
     writer(path, _jsonl_bytes(rows))
@@ -325,6 +347,7 @@ def _write_report(
         "",
         f"Run ID: {metadata['run_id']}",
         f"Code commit: {metadata['code_commit']}",
+        f"Artifact recalculation code commit: {metadata.get('artifact_finalization_code_commit', metadata['code_commit'])}",
         f"YEE-31 ADVANCE input SHA-256: {metadata['input_hashes']['yee31_advance_review_set_sha256']}",
         f"YEE-30 read-only DB SHA-256: {metadata['input_hashes']['yee30_retrieval_db_sha256_before']}",
         f"Question set {metadata['question_set_version']} / {metadata['question_set_sha256']}",
@@ -537,6 +560,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "pair_policy_version": PAIR_POLICY_VERSION,
         "pair_output_version": PAIR_OUTPUT_VERSION,
     }
+    if args.finalize_only:
+        run_metadata = _reuse_persisted_run_metadata(
+            output_dir / "RUN_METADATA.json",
+            run_basis,
+        )
+        run_id = str(run_metadata["run_id"])
     _write_json(output_dir / "RUN_METADATA.json", run_metadata)
     provider = jev_provider_from_env()
     if (
@@ -635,7 +664,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 and all(stability_report["gates"].values())
                 else "PILOT_GATES_FAILED_REVIEW_REQUIRED"
             )
-            report_metadata = {**metadata, "status": status}
+            report_metadata = {
+                **metadata,
+                "artifact_finalization_code_commit": code_commit,
+                "status": status,
+            }
             _write_jsonl(output_dir / "PILOT_OUTCOMES.jsonl", pilot_outcomes, rebuild=True)
             _write_outcome_csv(output_dir / "PILOT_OUTCOMES.csv", pilot_outcomes)
             _write_jsonl(output_dir / "STABILITY_OUTCOMES.jsonl", stability_outcomes, rebuild=True)
