@@ -227,6 +227,17 @@ def _combine_manual_audit(
     return combined
 
 
+def _assert_terminal_outcomes(results: list[Mapping[str, Any]], label: str) -> None:
+    nonterminal = sorted(
+        {str(row.get("status")) for row in results}
+        - {"completed", "failed"}
+    )
+    if nonterminal:
+        raise RuntimeError(
+            f"offline finalize found nonterminal {label} outcomes: {', '.join(nonterminal)}"
+        )
+
+
 def _probability_qa(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
     by_question: dict[str, list[float]] = {}
     for row in rows:
@@ -575,10 +586,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 pilot_results, stability_results = _load_cached_results(
                     runner, pilot_pairs, stability_pairs
                 )
-                if any(row["status"] != "completed" for row in pilot_results):
-                    raise RuntimeError("offline finalize found incomplete pilot pairs")
-                if any(row["status"] != "completed" for row in stability_results):
-                    raise RuntimeError("offline finalize found incomplete stability replicates")
+                _assert_terminal_outcomes(pilot_results, "pilot")
+                _assert_terminal_outcomes(stability_results, "stability")
             else:
                 pilot_results = runner.run_pairs(pilot_pairs, topic_by_key)
                 pilot_outcomes = _pair_outcomes(pilot_pairs, pilot_results)

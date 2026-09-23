@@ -4,6 +4,7 @@ from collections import Counter
 import pytest
 
 import market_analysis.concept_pairs as pairs_module
+from market_analysis.concept_pairs_cli import _assert_terminal_outcomes
 from market_analysis.concept_pairs import (
     EXPECTED_MODEL_ALIAS,
     EXPECTED_MODEL_VERSION,
@@ -26,6 +27,15 @@ from market_analysis.jev_triage import (
     parse_response,
     sha256_bytes,
 )
+
+
+def test_offline_finalize_accepts_terminal_failures_but_rejects_running_rows():
+    _assert_terminal_outcomes(
+        [{"status": "completed"}, {"status": "failed"}],
+        "pilot",
+    )
+    with pytest.raises(RuntimeError, match="nonterminal pilot outcomes"):
+        _assert_terminal_outcomes([{"status": "running"}], "pilot")
 
 
 def _topic(topic_key, identities=(), candidate_class="overlap", sources=None):
