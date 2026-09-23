@@ -50,3 +50,32 @@ deterministic derived output, credential handling and fixture tests are
 documented in [YEE31_HARNESS.md](YEE31_HARNESS.md). No model-generated prose or
 free-form JSON is part of the production path. Live inference remains gated on
 an authorized runtime credential and an explicit pilot decision.
+
+## YEE-37 concept-pair pilot
+
+YEE-37 loads only the accepted 1,807-topic YEE-31 ADVANCE review set and opens
+the accepted YEE-30 retrieval DB read-only. It builds a deterministic,
+versioned candidate-pair universe locally, applies the full corpus sentinel
+set, and uses local lexical metrics only for blocking and stratification.
+Fuzzy similarity never selects a merge.
+
+The Jev pair contract is in [JEV_PAIR_QUESTIONS.json](JEV_PAIR_QUESTIONS.json).
+Only SAME_CONCEPT with merge_safe >= 0.5 maps to MERGE; insufficient or
+unsafe same-concept evidence maps to REVIEW; broader/narrower, related
+distinct, and unrelated relations map to KEEP_SEPARATE. Direct TypeSafe
+requests use the accepted YEE-31 typesafe-sdk==0.7.1 transport, requested
+alias jev-latest, and fail-closed expected model jev-1.13.0.
+
+Run the first gate with a fresh output directory and runtime-injected
+JEV_TRANSPORT=typesafe and TYPESAFE_API_KEY:
+
+    python -m market_analysis.concept_pairs_cli
+      --advance-set <accepted-ADVANCE_REVIEW_SET_UNRANKED.jsonl>
+      --input-db <accepted-YEE-30-retrieval.db>
+      --output-dir <new-YEE-37-pilot-directory>
+
+The command builds and byte-checks the full candidate-pair file before any
+inference, then runs exactly 120 pilot pairs and 40 pairs with three fresh
+stability replicates. It does not adjudicate the remaining pairs or build
+concept families. Offline artifact recalculation from the persisted SQLite
+attempts uses --finalize-only and makes no Jev/network requests.
