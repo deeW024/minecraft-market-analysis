@@ -12,6 +12,9 @@ from market_analysis.concept_pairs_cli import (
 from market_analysis.concept_pairs import (
     EXPECTED_MODEL_ALIAS,
     EXPECTED_MODEL_VERSION,
+    PAIR_MAX_EXAMPLES_PER_TOPIC,
+    PAIR_STATE_MAX_BYTES,
+    PAIR_STATE_VERSION,
     PairAdjudicationRunner,
     build_pair_state,
     build_stability_report,
@@ -23,6 +26,8 @@ from market_analysis.concept_pairs import (
     select_stratified_pairs,
 )
 from market_analysis.jev_triage import (
+    JevTransportError,
+    InputIntegrityError,
     ModelVersionMismatchError,
     ProviderResponse,
     RawEvidenceCapture,
@@ -145,7 +150,16 @@ def _native_response(relation="SAME_CONCEPT", merge_safe=0.9, model="jev-1.13.0"
         kind = question["type"]
         if kind == "choice":
             choices = list(question["criteria"])
-            choice = relation if question_id == "concept_relation" else "NOT_APPLICABLE"
+            if question_id == "concept_relation":
+                choice = relation
+            elif question_id == "merge_disposition":
+                choice = (
+                    "MERGE" if relation == "SAME_CONCEPT"
+                    else "KEEP_SEPARATE" if relation in {"BROADER_NARROWER", "RELATED_DISTINCT", "UNRELATED"}
+                    else "REVIEW"
+                )
+            else:
+                choice = "NOT_APPLICABLE"
             answers[question_id] = {
                 "type": "choice",
                 "choice": choice,
@@ -270,14 +284,55 @@ def test_fuzzy_only_neighbor_cap_is_per_topic_and_rule_pairs_bypass_it(monkeypat
     assert not armor_pair["fuzzy_only"]
 
 
-def test_pair_policy_uses_only_typed_relation_and_merge_safe_value():
-    assert pair_policy({"concept_relation": {"choice": "SAME_CONCEPT"}, "merge_safe": {"noul": 0.5}}) == "MERGE"
-    assert pair_policy({"concept_relation": {"choice": "SAME_CONCEPT"}, "merge_safe": {"noul": 0.499}}) == "REVIEW"
-    assert pair_policy({"concept_relation": {"choice": "INSUFFICIENT"}, "merge_safe": {"noul": 1.0}}) == "REVIEW"
+def test_pair_policy_v02_uses_disposition_and_keeps_merge_safe_diagnostic():
+    for merge_safe in (0.1, 0.499, 0.5, 0.9):
+        answers = {
+            "concept_relation": {"choice": "SAME_CONCEPT"},
+            "merge_disposition": {"choice": "MERGE"},
+            "merge_safe": {"noul": merge_safe},
+        }
+        assert pair_policy(answers) == "MERGE"
+    assert pair_policy({
+        "concept_relation": {"choice": "INSUFFICIENT"},
+        "merge_disposition": {"choice": "MERGE"},
+    }) == "REVIEW"
     for relation in ("BROADER_NARROWER", "RELATED_DISTINCT", "UNRELATED"):
-        assert pair_policy({"concept_relation": {"choice": relation}, "merge_safe": {"noul": 1.0}}) == "KEEP_SEPARATE"
+        assert pair_policy({
+            "concept_relation": {"choice": relation},
+            "merge_disposition": {"choice": "KEEP_SEPARATE"},
+        }) == "KEEP_SEPARATE"
+    assert pair_policy({
+        "concept_relation": {"choice": "SAME_CONCEPT"},
+        "merge_disposition": {"choice": "KEEP_SEPARATE"},
+    }) == "REVIEW"
+    assert pair_policy({
+        "concept_relation": {"choice": "RELATED_DISTINCT"},
+        "merge_disposition": {"choice": "MERGE"},
+    }) == "REVIEW"
+    assert pair_policy({
+        "concept_relation": {"choice": "UNRELATED"},
+        "merge_disposition": {"choice": "REVIEW"},
+    }) == "REVIEW"
     with pytest.raises(TriageValidationError):
-        pair_policy({"concept_relation": {"choice": "FUZZY_SIMILAR"}, "merge_safe": {"noul": 1.0}})
+        pair_policy({
+            "concept_relation": {"choice": "FUZZY_SIMILAR"},
+            "merge_disposition": {"choice": "MERGE"},
+        })
+
+
+def test_sentinel_policy_fixtures_cover_merge_and_not_merge():
+    expected_merge = {
+        "concept_relation": {"choice": "SAME_CONCEPT"},
+        "merge_disposition": {"choice": "MERGE"},
+        "merge_safe": {"noul": 0.2},
+    }
+    expected_not_merge = {
+        "concept_relation": {"choice": "RELATED_DISTINCT"},
+        "merge_disposition": {"choice": "KEEP_SEPARATE"},
+        "merge_safe": {"noul": 0.99},
+    }
+    assert pair_policy(expected_merge) == "MERGE"
+    assert pair_policy(expected_not_merge) == "KEEP_SEPARATE"
 
 
 def test_stratified_pilot_and_stability_force_sentinels_deterministically():
@@ -313,8 +368,10 @@ def test_pair_state_contains_accepted_evidence_but_not_prior_triage_prose():
             "examples": [{
                 "canonical_identity": "shared",
                 "source_resource_id": "r-1",
+                "source": "modrinth",
                 "title": "Title",
                 "summary": "Summary",
+                "selection_roles": ["representative"],
                 "source_url": "https://example.invalid/never-follow",
             }],
         }
@@ -327,6 +384,61 @@ def test_pair_state_contains_accepted_evidence_but_not_prior_triage_prose():
     assert "never-follow" not in rendered
     assert "rationale" not in rendered
     assert "external_research_questions" not in rendered
+    assert "topic_source_facts" not in rendered
+    assert "source_resource_id" not in rendered
+    assert "source_url" not in rendered
+    assert state["pair_state_version"] == PAIR_STATE_VERSION
+    assert set(state["left"]) == {
+        "topic_key", "topic_display", "candidate_class", "source_presence", "examples", "provenance"
+    }
+
+
+def test_pair_state_v02_selects_shared_roles_source_balanced_and_only_allowlisted_fields():
+    left = _topic("left")
+    right = _topic("right")
+    roles = ("representative", "highest_demand_percentile", "freshest")
+    for topic in (left, right):
+        topic["candidate"]["source_presence"] = {"modrinth": 20, "voxel": 12, "hangar": 3}
+        for source in ("modrinth", "voxel", "hangar"):
+            topic["evidence_pack"]["sources"][source] = {
+                "examples": [
+                    {
+                        "source": source,
+                        "canonical_identity": f"{source}-{index}",
+                        "source_resource_id": f"raw-id-{index}",
+                        "title": f"{source} title {index}",
+                        "summary": f"{source} summary {index}",
+                        "project_type_norm": "plugin",
+                        "category_facets_json": '["utility","world"]',
+                        "selection_roles": [roles[index % len(roles)]],
+                        "downloads_total": "987654321",
+                        "price_amount": 4.5,
+                        "version_facets_json": '["1.21"]',
+                    }
+                    for index in range(12)
+                ]
+            }
+    pair = _pair_record("left", "right")
+    pair["shared_canonical_identities"] = ["modrinth-0", "voxel-0"]
+    state = build_pair_state(pair, {"left": left, "right": right})
+    member = state["left"]
+    rendered = canonical_json(state)
+    assert len(member["examples"]) == PAIR_MAX_EXAMPLES_PER_TOPIC
+    assert [row["canonical_identity"] for row in member["examples"][:2]] == [
+        "modrinth-0", "voxel-0"
+    ]
+    assert set(member["source_presence"]) == {"modrinth", "voxel", "hangar"}
+    source_counts = Counter(row["source"] for row in member["examples"])
+    assert max(source_counts.values()) - min(source_counts.values()) <= 1
+    assert set(member["examples"][0]) == {
+        "source", "canonical_identity", "title", "summary", "project_type_norm",
+        "category_facets", "selection_roles",
+    }
+    assert member["examples"][0]["category_facets"] == ["utility", "world"]
+    assert "987654321" not in rendered
+    assert "price_amount" not in rendered and "version_facets" not in rendered
+    assert "source_resource_id" not in rendered
+    assert len(rendered.encode("utf-8")) <= PAIR_STATE_MAX_BYTES
 
 
 def test_pair_response_contract_preserves_typed_values_and_policy():
@@ -340,6 +452,7 @@ def test_pair_response_contract_preserves_typed_values_and_policy():
     )
     assert normalized["returned_model"] == EXPECTED_MODEL_VERSION
     assert normalized["policy_decision"] == "MERGE"
+    assert normalized["merge_disposition"]["choice"] == "MERGE"
     assert normalized["typed_answers"]["concept_relation"]["choice"] == "SAME_CONCEPT"
     assert normalized["typed_answers"]["evidence_alignment"]["score"] == 4
 
@@ -365,7 +478,7 @@ def test_request_and_response_are_persisted_before_dispatch_and_parse(tmp_path):
     runner = _runner(tmp_path / "pair.db", reasoner)
     holder["runner"] = runner
     runner.register_candidate_pairs([pair])
-    state = {"pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
+    state = {"pair_state_version": PAIR_STATE_VERSION, "pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
     try:
         result = runner.run_pair(pair, state)
         attempt = runner.connection.execute(
@@ -386,7 +499,7 @@ def test_cache_resume_is_idempotent_and_replicate_identity_is_separate(tmp_path)
     reasoner = FixtureReasoner([_native_response(), _native_response()])
     runner = _runner(tmp_path / "resume.db", reasoner)
     runner.register_candidate_pairs([pair])
-    state = {"pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
+    state = {"pair_state_version": PAIR_STATE_VERSION, "pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
     try:
         first = runner.run_pair(pair, state)
         replay = runner.run_pair(pair, state)
@@ -397,6 +510,55 @@ def test_cache_resume_is_idempotent_and_replicate_identity_is_separate(tmp_path)
     assert replay["status"] == "completed"
     assert repeated["cache_key"] != first["cache_key"]
     assert len(reasoner.requests) == 2
+
+
+def test_cache_identity_includes_all_v02_contract_versions(tmp_path, monkeypatch):
+    pair = _pair_record("alpha", "beta")
+    reasoner = FixtureReasoner([])
+    runner = _runner(tmp_path / "versions.db", reasoner)
+    state = {
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_id": pair["pair_id"],
+        "left": {"topic_key": "alpha"},
+        "right": {"topic_key": "beta"},
+    }
+    try:
+        _, baseline = runner._request(pair, state, None)
+        for name in (
+            "PAIR_STATE_VERSION",
+            "PAIR_QUESTION_SET_VERSION",
+            "PAIR_POLICY_VERSION",
+            "PAIR_OUTPUT_VERSION",
+        ):
+            original = getattr(pairs_module, name)
+            changed = original + "-fixture-change"
+            monkeypatch.setattr(pairs_module, name, changed)
+            changed_state = dict(state)
+            if name == "PAIR_STATE_VERSION":
+                changed_state["pair_state_version"] = changed
+            _, changed_key = runner._request(pair, changed_state, None)
+            assert changed_key != baseline
+            monkeypatch.setattr(pairs_module, name, original)
+    finally:
+        runner.close()
+
+
+def test_oversized_pair_state_fails_closed_before_provider_dispatch(tmp_path):
+    pair = _pair_record("alpha", "beta")
+    reasoner = FixtureReasoner([_native_response()])
+    runner = _runner(tmp_path / "oversized.db", reasoner)
+    runner.register_candidate_pairs([pair])
+    oversized = {
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_id": pair["pair_id"],
+        "padding": "x" * PAIR_STATE_MAX_BYTES,
+    }
+    try:
+        with pytest.raises(InputIntegrityError, match="16 KiB"):
+            runner.run_pair(pair, oversized)
+    finally:
+        runner.close()
+    assert reasoner.requests == []
 
 
 def test_model_version_mismatch_saves_raw_and_aborts_without_retry_or_next_pair(tmp_path):
@@ -435,7 +597,7 @@ def test_bounded_parse_retry_uses_first_contract_valid_response(tmp_path):
     reasoner = FixtureReasoner([invalid, _native_response("RELATED_DISTINCT", 0.9)])
     runner = _runner(tmp_path / "retry.db", reasoner, max_attempts=2)
     runner.register_candidate_pairs([pair])
-    state = {"pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
+    state = {"pair_state_version": PAIR_STATE_VERSION, "pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
     try:
         result = runner.run_pair(pair, state)
         attempts = runner.raw_attempts()
@@ -445,6 +607,50 @@ def test_bounded_parse_retry_uses_first_contract_valid_response(tmp_path):
     assert result["normalized"]["policy_decision"] == "KEEP_SEPARATE"
     assert [row["stage"] for row in attempts] == ["parse_error", "completed"]
     assert len(reasoner.requests) == 2
+
+
+def test_http_400_max_tokens_exceeded_is_terminal_raw_preserved_and_idempotent(tmp_path):
+    pair = _pair_record("alpha", "beta")
+    error_body = canonical_json({"detail": {"error_type": "max_tokens_exceeded"}}).encode()
+
+    class MaxTokensReasoner(FixtureReasoner):
+        def complete(self, request, capture=None):
+            self.requests.append(request)
+            if capture is not None:
+                capture.before_dispatch(request.body)
+                capture.before_parse(400, error_body, "fixture-max-tokens")
+            raise JevTransportError(
+                "Jev HTTP request failed",
+                status_code=400,
+                request_id="fixture-max-tokens",
+                error_body=error_body.decode(),
+            )
+
+    reasoner = MaxTokensReasoner([])
+    runner = _runner(tmp_path / "max_tokens.db", reasoner, max_attempts=3)
+    runner.register_candidate_pairs([pair])
+    state = {
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_id": pair["pair_id"],
+        "left": {"topic_key": "alpha"},
+        "right": {"topic_key": "beta"},
+    }
+    try:
+        first = runner.run_pair(pair, state)
+        resumed = runner.run_pair(pair, state)
+        attempt = runner.connection.execute(
+            "SELECT stage,error,raw_response,request_id FROM pair_attempts"
+        ).fetchone()
+        count = runner.connection.execute("SELECT COUNT(*) FROM pair_attempts").fetchone()[0]
+    finally:
+        runner.close()
+    assert first["status"] == resumed["status"] == "failed"
+    assert first["cache_key"] == resumed["cache_key"]
+    assert len(reasoner.requests) == count == 1
+    assert attempt["stage"] == "terminal_max_tokens_exceeded"
+    assert bytes(attempt["raw_response"]) == error_body
+    assert "max_tokens_exceeded" in attempt["error"]
+    assert attempt["request_id"] == "fixture-max-tokens"
 
 
 def test_manual_audit_selection_is_deterministic_and_covers_observed_decisions():
@@ -458,6 +664,7 @@ def test_manual_audit_selection_is_deterministic_and_covers_observed_decisions()
             "normalized": {
                 "policy_decision": decisions[index % 3],
                 "concept_relation": {"choice": "SAME_CONCEPT"},
+                "merge_disposition": {"choice": "MERGE"},
                 "merge_safe": {"noul": 0.8},
             },
         })
@@ -479,6 +686,7 @@ def test_stability_report_uses_pair_policy_and_keeps_all_three_replicates():
             normalized = {
                 "policy_decision": "MERGE" if relation == "SAME_CONCEPT" else "KEEP_SEPARATE",
                 "concept_relation": envelope["answers"]["concept_relation"],
+                "merge_disposition": envelope["answers"]["merge_disposition"],
                 "typed_answers": envelope["answers"],
                 "merge_safe": envelope["answers"]["merge_safe"],
                 "cache_key": f"{pair['pair_id']}-{repetition}",
@@ -521,6 +729,7 @@ def test_stability_deltas_compare_only_typed_values():
             "normalized": {
                 "policy_decision": "MERGE",
                 "concept_relation": answer,
+                "merge_disposition": envelope["answers"]["merge_disposition"],
                 "typed_answers": envelope["answers"],
                 "merge_safe": envelope["answers"]["merge_safe"],
                 "cache_key": str(repetition),

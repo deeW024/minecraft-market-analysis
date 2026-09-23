@@ -59,12 +59,20 @@ versioned candidate-pair universe locally, applies the full corpus sentinel
 set, and uses local lexical metrics only for blocking and stratification.
 Fuzzy similarity never selects a merge.
 
-The Jev pair contract is in [JEV_PAIR_QUESTIONS.json](JEV_PAIR_QUESTIONS.json).
-Only SAME_CONCEPT with merge_safe >= 0.5 maps to MERGE; insufficient or
-unsafe same-concept evidence maps to REVIEW; broader/narrower, related
-distinct, and unrelated relations map to KEEP_SEPARATE. Direct TypeSafe
+The Jev pair contract is in [JEV_PAIR_QUESTIONS.json](JEV_PAIR_QUESTIONS.json)
+and uses pair_state/questions/policy/output v0.2. Each topic sends at most
+eight deterministic source-balanced semantic examples; all 1,190 serialized
+pair states are preflighted at <=16 KiB before any model call. The native
+`merge_disposition` Choice drives the deterministic policy: MERGE requires
+SAME_CONCEPT + MERGE, KEEP_SEPARATE requires a distinct relation +
+KEEP_SEPARATE, and insufficient or contradictory answers map to REVIEW.
+`merge_safe` remains diagnostic and is never thresholded. Direct TypeSafe
 requests use the accepted YEE-31 typesafe-sdk==0.7.1 transport, requested
 alias jev-latest, and fail-closed expected model jev-1.13.0.
+
+The offline correction preflight compares v0.2 pair and selection artifacts
+byte-for-byte to the accepted v0.1 evidence and makes no Jev/network calls;
+HTTP 400 `max_tokens_exceeded` is terminal for its cache identity.
 
 Run the first gate with a fresh output directory and runtime-injected
 JEV_TRANSPORT=typesafe and TYPESAFE_API_KEY:

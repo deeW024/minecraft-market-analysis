@@ -20,6 +20,9 @@ from .concept_pairs import (
     PAIR_OUTPUT_VERSION,
     PAIR_POLICY_VERSION,
     PAIR_QUESTION_SET_VERSION,
+    PAIR_MAX_EXAMPLES_PER_TOPIC,
+    PAIR_STATE_MAX_BYTES,
+    PAIR_STATE_VERSION,
     PILOT_SIZE,
     STABILITY_REPETITIONS,
     STABILITY_SIZE,
@@ -122,7 +125,7 @@ def _write_raw_evidence(path: Path, rows: list[Mapping[str, Any]]) -> None:
 def _write_outcome_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
     fields = [
         "pair_id", "left_topic_key", "right_topic_key", "replicate_id",
-        "status", "attempt_count", "concept_relation", "merge_safe",
+        "status", "attempt_count", "concept_relation", "merge_disposition", "merge_safe",
         "lexical_alias", "evidence_alignment", "relation_direction",
         "policy_decision", "returned_model", "probability_sum_deviations", "cache_key",
     ]
@@ -135,7 +138,7 @@ def _write_outcome_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
             normalized = row.get("normalized") or {}
             item = {key: row.get(key) for key in fields if key in row}
             for key in (
-                "concept_relation", "merge_safe", "lexical_alias", "evidence_alignment",
+                "concept_relation", "merge_disposition", "merge_safe", "lexical_alias", "evidence_alignment",
                 "relation_direction", "policy_decision", "returned_model",
                 "probability_sum_deviations", "cache_key",
             ):
@@ -364,6 +367,7 @@ def _write_report(
         f"YEE-31 ADVANCE input SHA-256: {metadata['input_hashes']['yee31_advance_review_set_sha256']}",
         f"YEE-30 read-only DB SHA-256: {metadata['input_hashes']['yee30_retrieval_db_sha256_before']}",
         f"Question set {metadata['question_set_version']} / {metadata['question_set_sha256']}",
+        f"Pair state {metadata['pair_state_version']}; policy {metadata['pair_policy_version']}; output {metadata['pair_output_version']}",
         f"Model alias {metadata['requested_model_alias']} -> expected {metadata['expected_model_version']}",
         f"Transport {metadata['transport_id']} at {metadata['endpoint']}",
         "",
@@ -436,6 +440,8 @@ def _artifact_manifest(output_dir: Path, metadata: Mapping[str, Any]) -> dict[st
         "endpoint": metadata["endpoint"],
         "pair_generation_version": PAIR_GENERATION_VERSION,
         "pair_normalization_version": PAIR_NORMALIZATION_VERSION,
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_question_set_version": PAIR_QUESTION_SET_VERSION,
         "pair_policy_version": PAIR_POLICY_VERSION,
         "pair_output_version": PAIR_OUTPUT_VERSION,
         "artifact_files": artifacts,
@@ -457,6 +463,212 @@ def _load_cached_results(
         [row for row in pilot_all if row["pair_id"] in pilot_ids],
         [row for row in stability_all if row["pair_id"] in stability_ids],
     )
+
+
+def _directory_hashes(directory: Path) -> list[dict[str, Any]]:
+    if not directory.is_dir():
+        raise RuntimeError(f"v0.1 evidence directory is missing: {directory}")
+    return [
+        {
+            "path": path.relative_to(directory).as_posix(),
+            "bytes": path.stat().st_size,
+            "sha256": sha256_file(path),
+        }
+        for path in sorted(directory.rglob("*"), key=lambda item: item.relative_to(directory).as_posix())
+        if path.is_file()
+    ]
+
+
+def _pair_state_size_rows(
+    pairs: list[Mapping[str, Any]],
+    topics_by_key: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows = []
+    oversized = []
+    for pair in pairs:
+        state = build_pair_state(pair, topics_by_key)
+        state_bytes = canonical_json(state).encode("utf-8")
+        members = {side: state[side] for side in ("left", "right")}
+        if any(
+            len(member["examples"]) > PAIR_MAX_EXAMPLES_PER_TOPIC
+            for member in members.values()
+        ):
+            raise RuntimeError(f"pair_state has more than 8 examples/topic: {pair['pair_id']}")
+        row = {
+            "pair_id": pair["pair_id"],
+            "left_topic_key": pair["left_topic_key"],
+            "right_topic_key": pair["right_topic_key"],
+            "state_bytes": len(state_bytes),
+            "state_sha256": sha256_bytes(state_bytes),
+            "left_example_count": len(members["left"]["examples"]),
+            "right_example_count": len(members["right"]["examples"]),
+            "left_source_example_counts": dict(sorted(Counter(
+                example["source"] for example in members["left"]["examples"]
+            ).items())),
+            "right_source_example_counts": dict(sorted(Counter(
+                example["source"] for example in members["right"]["examples"]
+            ).items())),
+        }
+        rows.append(row)
+        if len(state_bytes) > PAIR_STATE_MAX_BYTES:
+            oversized.append((pair["pair_id"], len(state_bytes)))
+    if oversized:
+        raise RuntimeError(
+            "pair_state v0.2 preflight exceeded 16 KiB; no inference is allowed: "
+            + canonical_json(oversized)
+        )
+    return rows
+
+
+def _offline_v02_preflight(
+    output_dir: Path,
+    v01_evidence_dir: Path,
+    advance_path: Path,
+    retrieval_db: Path,
+    input_hashes: Mapping[str, str],
+    question_sha: str,
+    code_commit: str,
+    pairs: list[Mapping[str, Any]],
+    pair_bytes: bytes,
+    pilot_pairs: list[Mapping[str, Any]],
+    stability_pairs: list[Mapping[str, Any]],
+    topics_by_key: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    prior_files_before = _directory_hashes(v01_evidence_dir)
+    prior_file_hashes = {item["path"]: item["sha256"] for item in prior_files_before}
+    expected = {
+        "CANDIDATE_PAIRS.jsonl": pair_bytes,
+        "PILOT_SELECTION.jsonl": _jsonl_bytes(pilot_pairs),
+        "STABILITY_SELECTION.jsonl": _jsonl_bytes(stability_pairs),
+    }
+    for name, current in expected.items():
+        path = v01_evidence_dir / name
+        if not path.is_file() or path.read_bytes() != current:
+            raise RuntimeError(f"v0.2 changed the accepted v0.1 universe/selection artifact: {name}")
+
+    prior_pilot = _read_jsonl(v01_evidence_dir / "PILOT_OUTCOMES.jsonl")
+    oversized_v01 = [
+        row for row in prior_pilot
+        if row.get("status") == "failed" and "max_tokens_exceeded" in str(row.get("last_error") or "")
+    ]
+    if len(oversized_v01) != 4:
+        raise RuntimeError(f"expected the four accepted v0.1 max_tokens pairs, found {len(oversized_v01)}")
+
+    state_rows = _pair_state_size_rows(pairs, topics_by_key)
+    state_by_pair = {row["pair_id"]: row for row in state_rows}
+    missing_old = sorted(row["pair_id"] for row in oversized_v01 if row["pair_id"] not in state_by_pair)
+    if missing_old:
+        raise RuntimeError(f"historically oversized pilot pair is missing from the v0.2 universe: {missing_old}")
+    old_pair_sizes = {
+        row["pair_id"]: state_by_pair[row["pair_id"]]["state_bytes"]
+        for row in oversized_v01
+    }
+
+    advance_after = sha256_file(advance_path)
+    y30_after = sha256_file(retrieval_db)
+    if (
+        advance_after.lower() != YEE31_ACCEPTED_INPUT_SHA256
+        or y30_after.lower() != YEE30_ACCEPTED_DB_SHA256
+    ):
+        raise RuntimeError("accepted YEE-31/YEE-30 canonical input changed during offline v0.2 preflight")
+    prior_files_after = _directory_hashes(v01_evidence_dir)
+    if prior_files_before != prior_files_after:
+        raise RuntimeError("accepted v0.1 pilot/stability evidence changed during v0.2 preflight")
+
+    pilot_identity_sha = sha256_bytes(canonical_json([row["pair_id"] for row in pilot_pairs]).encode())
+    stability_identity_sha = sha256_bytes(canonical_json([row["pair_id"] for row in stability_pairs]).encode())
+    qa = {
+        "work_order": "YEE-37",
+        "status": "PAIR_GATE_V02_READY_FOR_SUPERVISOR_REVIEW",
+        "execution_mode": "offline_only",
+        "network_or_jev_requests": 0,
+        "code_commit": code_commit,
+        "input_hashes_before_after": {
+            "yee31_advance_review_set": {"before": input_hashes["yee31_advance_review_set_sha256"], "after": advance_after},
+            "yee30_retrieval_db": {"before": input_hashes["yee30_retrieval_db_sha256_before"], "after": y30_after},
+        },
+        "pair_generation_version": PAIR_GENERATION_VERSION,
+        "pair_state_version": PAIR_STATE_VERSION,
+        "question_set_version": PAIR_QUESTION_SET_VERSION,
+        "question_set_sha256": question_sha,
+        "policy_version": PAIR_POLICY_VERSION,
+        "output_version": PAIR_OUTPUT_VERSION,
+        "candidate_pair_count": len(pairs),
+        "candidate_pair_unique_id_count": len({row["pair_id"] for row in pairs}),
+        "candidate_pairs_sha256": sha256_bytes(pair_bytes),
+        "candidate_pair_artifact_byte_identical_to_v01": True,
+        "pilot_count": len(pilot_pairs),
+        "pilot_selection_sha256": sha256_bytes(expected["PILOT_SELECTION.jsonl"]),
+        "pilot_selection_identity_sha256": pilot_identity_sha,
+        "pilot_selection_artifact_byte_identical_to_v01": True,
+        "stability_pair_count": len(stability_pairs),
+        "stability_repetitions": STABILITY_REPETITIONS,
+        "stability_selection_sha256": sha256_bytes(expected["STABILITY_SELECTION.jsonl"]),
+        "stability_selection_identity_sha256": stability_identity_sha,
+        "stability_selection_artifact_byte_identical_to_v01": True,
+        "pair_state_max_bytes": PAIR_STATE_MAX_BYTES,
+        "pair_states_checked": len(state_rows),
+        "pair_states_within_byte_bound": len(state_rows),
+        "max_pair_state_bytes": max(row["state_bytes"] for row in state_rows),
+        "mean_pair_state_bytes": round(sum(row["state_bytes"] for row in state_rows) / len(state_rows), 2),
+        "max_examples_per_topic": PAIR_MAX_EXAMPLES_PER_TOPIC,
+        "observed_max_examples_per_topic": max(
+            max(row["left_example_count"], row["right_example_count"]) for row in state_rows
+        ),
+        "historically_oversized_v01_pairs": old_pair_sizes,
+        "v01_evidence_unchanged": True,
+        "v01_evidence_files": prior_files_before,
+    }
+    _write_jsonl(output_dir / "PAIR_STATE_SIZE_QA_V02.jsonl", state_rows)
+    _write_json(output_dir / "OFFLINE_V02_QA.json", qa)
+    report = "\n".join([
+        "# YEE-37 Pair Gate v0.2 — Offline Review",
+        "",
+        "Status: `PAIR_GATE_V02_READY_FOR_SUPERVISOR_REVIEW`",
+        "",
+        "No Jev/provider/network calls were made. The v0.1 pilot/stability database and artifacts were read-only and their complete directory hash inventory matched before and after.",
+        "",
+        f"- Pair universe: {len(pairs)} pairs; byte-identical to accepted v0.1 `CANDIDATE_PAIRS.jsonl` (SHA-256 `{qa['candidate_pairs_sha256']}`).",
+        f"- Pilot/stability selections: {len(pilot_pairs)} and {len(stability_pairs)} identities; both files byte-identical to accepted v0.1 selections.",
+        f"- State bound: {len(state_rows)}/{len(pairs)} pair states are <= {PAIR_STATE_MAX_BYTES} bytes; max {qa['max_pair_state_bytes']} bytes; max examples/topic {qa['observed_max_examples_per_topic']}.",
+        f"- Previously oversized pairs: {canonical_json(old_pair_sizes)} bytes after compaction.",
+        f"- Contract versions: state `{PAIR_STATE_VERSION}`, questions `{PAIR_QUESTION_SET_VERSION}`, policy `{PAIR_POLICY_VERSION}`, output `{PAIR_OUTPUT_VERSION}`.",
+        f"- YEE-31 input SHA-256 before/after: `{advance_after}`.",
+        f"- YEE-30 read-only DB SHA-256 before/after: `{y30_after}`.",
+        "",
+        "The 120-pair pilot, 40 × 3 stability audit, full pair adjudication and family build were not run. v0.1 evidence remains immutable.",
+        "",
+        f"Code commit: `{code_commit}`. Pair-state size evidence is `PAIR_STATE_SIZE_QA_V02.jsonl`; QA and hashes are in `OFFLINE_V02_QA.json`.",
+        "",
+        "PR #4 remains draft/open/unmerged pending supervisor review.",
+        "",
+    ])
+    _write_generated(output_dir / "OFFLINE_V02_REPORT.md", report.encode("utf-8"))
+    manifest = {
+        "work_order": "YEE-37",
+        "status": qa["status"],
+        "code_commit": code_commit,
+        "input_hashes": qa["input_hashes_before_after"],
+        "pair_generation_version": PAIR_GENERATION_VERSION,
+        "pair_state_version": PAIR_STATE_VERSION,
+        "question_set_version": PAIR_QUESTION_SET_VERSION,
+        "question_set_sha256": question_sha,
+        "policy_version": PAIR_POLICY_VERSION,
+        "output_version": PAIR_OUTPUT_VERSION,
+        "v01_evidence_unchanged": True,
+        "files": [],
+    }
+    for path in sorted(output_dir.iterdir(), key=lambda item: item.name):
+        if path.is_file() and path.name != "OFFLINE_V02_MANIFEST.json":
+            manifest["files"].append({"path": path.name, "bytes": path.stat().st_size, "sha256": sha256_file(path)})
+    _write_json(output_dir / "OFFLINE_V02_MANIFEST.json", manifest)
+    return {
+        "status": qa["status"],
+        "network_or_jev_requests": 0,
+        "candidate_pair_count": qa["candidate_pair_count"],
+        "max_pair_state_bytes": qa["max_pair_state_bytes"],
+        "output_dir": str(output_dir),
+    }
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -497,6 +709,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "questions": questions,
         }) + "\n").encode("utf-8"),
     )
+    if args.offline_v02_preflight:
+        if not args.v01_evidence_dir:
+            raise RuntimeError("offline v0.2 preflight requires --v01-evidence-dir")
+        return _offline_v02_preflight(
+            output_dir,
+            Path(args.v01_evidence_dir).resolve(),
+            advance_path,
+            retrieval_db,
+            input_hashes,
+            question_sha,
+            code_commit,
+            pairs,
+            pair_bytes,
+            pilot_pairs,
+            stability_pairs,
+            topic_by_key,
+        )
+    state_size_rows = _pair_state_size_rows(pairs, topic_by_key)
+    _write_jsonl(output_dir / "PAIR_STATE_SIZE_QA_V02.jsonl", state_size_rows)
     if args.preflight_only:
         universe_preflight = {
             "work_order": "YEE-37",
@@ -514,6 +745,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "candidate_universe_qa": _universe_qa(pairs),
             "question_set_version": PAIR_QUESTION_SET_VERSION,
             "question_set_sha256": question_sha,
+            "pair_state_version": PAIR_STATE_VERSION,
+            "pair_state_count": len(state_size_rows),
+            "pair_state_max_bytes": max(row["state_bytes"] for row in state_size_rows),
             "network_requests": 0,
             "yee30_read_only": True,
         }
@@ -551,6 +785,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "inference_parameters": {},
         "pair_generation_version": PAIR_GENERATION_VERSION,
         "pair_normalization_version": PAIR_NORMALIZATION_VERSION,
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_question_set_version": PAIR_QUESTION_SET_VERSION,
         "pair_policy_version": PAIR_POLICY_VERSION,
         "pair_output_version": PAIR_OUTPUT_VERSION,
         "candidate_pair_count": len(pairs),
@@ -569,6 +805,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             if key in y30_metadata
         },
         "question_set_version": PAIR_QUESTION_SET_VERSION,
+        "pair_state_version": PAIR_STATE_VERSION,
         "pair_generation_version": PAIR_GENERATION_VERSION,
         "pair_normalization_version": PAIR_NORMALIZATION_VERSION,
         "pair_policy_version": PAIR_POLICY_VERSION,
@@ -757,6 +994,15 @@ def main() -> None:
         "--preflight-only",
         action="store_true",
         help="Build and byte-check the complete candidate-pair universe without Jev/network calls.",
+    )
+    mode.add_argument(
+        "--offline-v02-preflight",
+        action="store_true",
+        help="Verify v0.2 state sizes and exact v0.1 pair/selection identities without network calls.",
+    )
+    parser.add_argument(
+        "--v01-evidence-dir",
+        help="Accepted immutable v0.1 evidence directory, required for --offline-v02-preflight.",
     )
     args = parser.parse_args()
     print(json.dumps(run(args), ensure_ascii=False, sort_keys=True))

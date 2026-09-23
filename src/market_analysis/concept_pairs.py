@@ -39,9 +39,12 @@ YEE30_ACCEPTED_DB_SHA256 = "bc4b7d636b2d64594b7c64ce1583ed9aa080ac6da172398cd2b4
 EXPECTED_ADVANCE_TOPICS = 1_807
 PAIR_GENERATION_VERSION = "yee-37-candidate-pairs-v0.1"
 PAIR_NORMALIZATION_VERSION = "yee-37-pair-normalization-v0.1"
-PAIR_POLICY_VERSION = "yee-37-pair-policy-v0.1"
-PAIR_QUESTION_SET_VERSION = "yee-37-native-pair-questions-v0.1"
-PAIR_OUTPUT_VERSION = "yee-37-pair-outcomes-v0.1"
+PAIR_STATE_VERSION = "yee-37-pair-state-v0.2"
+PAIR_POLICY_VERSION = "yee-37-pair-policy-v0.2"
+PAIR_QUESTION_SET_VERSION = "yee-37-native-pair-questions-v0.2"
+PAIR_OUTPUT_VERSION = "yee-37-pair-outcomes-v0.2"
+PAIR_STATE_MAX_BYTES = 16 * 1024
+PAIR_MAX_EXAMPLES_PER_TOPIC = 8
 EXPECTED_MODEL_ALIAS = "jev-latest"
 EXPECTED_MODEL_VERSION = "jev-1.13.0"
 FUZZY_EDIT_THRESHOLD = 0.86
@@ -53,6 +56,7 @@ STABILITY_REPETITIONS = 3
 QUESTION_SET_PATH = Path(__file__).resolve().parents[2] / "JEV_PAIR_QUESTIONS.json"
 QUESTION_IDS = (
     "concept_relation",
+    "merge_disposition",
     "merge_safe",
     "lexical_alias",
     "evidence_alignment",
@@ -96,6 +100,7 @@ def load_pair_questions() -> tuple[dict[str, Any], str]:
         raise ValueError("checked-in YEE-37 pair question contract is incomplete or has the wrong version")
     expected_types = {
         "concept_relation": "choice",
+        "merge_disposition": "choice",
         "merge_safe": "noul",
         "lexical_alias": "noul",
         "evidence_alignment": "score",
@@ -105,7 +110,7 @@ def load_pair_questions() -> tuple[dict[str, Any], str]:
         raise ValueError("YEE-37 question types do not match the native typed contract")
     digest_input = (
         f"{PAIR_QUESTION_SET_VERSION}\n{canonical_json(questions)}\n"
-        f"{PAIR_POLICY_VERSION}\n{PAIR_OUTPUT_VERSION}"
+        f"{PAIR_STATE_VERSION}\n{PAIR_POLICY_VERSION}\n{PAIR_OUTPUT_VERSION}"
     ).encode("utf-8")
     return questions, sha256_bytes(digest_input)
 
@@ -600,99 +605,185 @@ def select_stratified_pairs(
 
 def pair_policy(answers: Mapping[str, Any]) -> str:
     relation = answers["concept_relation"]["choice"]
-    merge_safe = answers["merge_safe"]["noul"]
-    if relation == "SAME_CONCEPT":
-        return "MERGE" if merge_safe >= 0.5 else "REVIEW"
-    if relation == "INSUFFICIENT":
+    disposition = answers["merge_disposition"]["choice"]
+    if relation not in ALL_RELATIONS:
+        raise TriageValidationError(f"unsupported pair relation: {relation}")
+    if disposition not in {"MERGE", "KEEP_SEPARATE", "REVIEW"}:
+        raise TriageValidationError(f"unsupported merge disposition: {disposition}")
+    if disposition == "REVIEW" or relation == "INSUFFICIENT":
         return "REVIEW"
-    if relation in {"BROADER_NARROWER", "RELATED_DISTINCT", "UNRELATED"}:
-        return "KEEP_SEPARATE"
-    raise TriageValidationError(f"unsupported pair relation: {relation}")
+    if disposition == "MERGE":
+        return "MERGE" if relation == "SAME_CONCEPT" else "REVIEW"
+    if disposition == "KEEP_SEPARATE":
+        return (
+            "KEEP_SEPARATE"
+            if relation in {"BROADER_NARROWER", "RELATED_DISTINCT", "UNRELATED"}
+            else "REVIEW"
+        )
+    raise AssertionError("validated pair disposition was not handled")
+
+
+def _is_terminal_max_tokens_error(error: Exception) -> bool:
+    if not isinstance(error, JevTransportError) or error.status_code != 400:
+        return False
+    body = error.error_body or ""
+    if not body:
+        return False
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return "max_tokens_exceeded" in body.casefold()
+
+    def contains_code(value: Any) -> bool:
+        if isinstance(value, Mapping):
+            return any(
+                (key == "error_type" and item == "max_tokens_exceeded")
+                or contains_code(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, list):
+            return any(contains_code(item) for item in value)
+        return False
+
+    return contains_code(parsed)
+
+
+def _role_priority(example: Mapping[str, Any]) -> int:
+    raw_roles = example.get("selection_roles", [])
+    roles = {
+        str(role).strip().casefold().replace("-", "_")
+        for role in raw_roles
+    } if isinstance(raw_roles, (list, tuple, set)) else set()
+    if "representative" in roles:
+        return 0
+    if "highest_demand_percentile" in roles:
+        return 1
+    if "freshest" in roles:
+        return 2
+    return 3
+
+
+def _category_facets(example: Mapping[str, Any]) -> list[str]:
+    value = example.get("category_facets_json", example.get("category_facets", []))
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(value, list):
+        return []
+    return sorted({item for item in value if isinstance(item, str) and item})
+
+
+def _member_examples(
+    topic: Mapping[str, Any],
+    pair_shared_identities: set[str],
+) -> list[dict[str, Any]]:
+    by_source: dict[str, list[tuple[tuple[int, int, str, str, str], dict[str, Any]]]] = {}
+    for source, source_pack in sorted(topic["evidence_pack"]["sources"].items()):
+        ranked = []
+        for example in source_pack["examples"]:
+            identity = str(example.get("canonical_identity", ""))
+            if not identity:
+                continue
+            raw_roles = example.get("selection_roles", [])
+            item = {
+                "source": str(source),
+                "canonical_identity": identity,
+                "title": str(example.get("title") or ""),
+                "summary": str(example.get("summary") or ""),
+                "project_type_norm": example.get("project_type_norm"),
+                "category_facets": _category_facets(example),
+                "selection_roles": sorted(
+                    {str(role) for role in raw_roles}
+                ) if isinstance(raw_roles, (list, tuple, set)) else [],
+            }
+            rank = (
+                0 if identity in pair_shared_identities else 1,
+                _role_priority(example),
+                identity,
+                item["title"],
+                item["summary"],
+            )
+            ranked.append((rank, item))
+        by_source[str(source)] = sorted(ranked, key=lambda row: row[0])
+
+    selected: list[dict[str, Any]] = []
+    seen_by_source: dict[str, set[str]] = {source: set() for source in by_source}
+    for shared_rank in (0, 1):
+        for role_rank in range(4):
+            source_rows = {
+                source: [
+                    item for rank, item in rows
+                    if rank[0] == shared_rank and rank[1] == role_rank
+                ]
+                for source, rows in by_source.items()
+            }
+            positions = {source: 0 for source in source_rows}
+            while len(selected) < PAIR_MAX_EXAMPLES_PER_TOPIC:
+                progressed = False
+                for source in sorted(source_rows):
+                    rows = source_rows[source]
+                    while positions[source] < len(rows):
+                        item = rows[positions[source]]
+                        positions[source] += 1
+                        identity = item["canonical_identity"]
+                        if identity in seen_by_source[source]:
+                            continue
+                        seen_by_source[source].add(identity)
+                        selected.append(item)
+                        progressed = True
+                        break
+                    if len(selected) == PAIR_MAX_EXAMPLES_PER_TOPIC:
+                        break
+                if not progressed:
+                    break
+    return selected
 
 
 def build_pair_state(
     pair: Mapping[str, Any],
     topics_by_key: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
+    pair_shared_identities = {
+        str(identity) for identity in pair.get("shared_canonical_identities", [])
+    }
+
     def member(topic_key: str) -> dict[str, Any]:
         topic = topics_by_key[topic_key]
         pack = topic["evidence_pack"]
-        sources: dict[str, Any] = {}
-        for source, source_pack in sorted(pack["sources"].items()):
-            sources[source] = {
-                "resource_count": source_pack["resource_count"],
-                "demand_percentile_ge90_count": source_pack["demand_percentile_ge90_count"],
-                "examples": [
-                    {
-                        key: example[key]
-                        for key in (
-                            "canonical_identity",
-                            "source_resource_id",
-                            "title",
-                            "summary",
-                            "demand_percentile",
-                            "downloads_total",
-                            "demand_metric_source",
-                            "freshness_age_days",
-                            "age_days",
-                            "project_type_norm",
-                            "category_facets_json",
-                            "loader_facets_json",
-                            "version_facets_json",
-                            "paid_state",
-                            "price_amount",
-                            "currency",
-                            "voxel_review_count",
-                            "voxel_review_stars",
-                            "follow_count",
-                            "star_count",
-                            "watcher_count",
-                            "hangar_recent_downloads",
-                            "hangar_recent_views",
-                            "selection_roles",
-                        )
-                        if key in example
-                    }
-                    for example in source_pack["examples"]
-                ],
-            }
-        facts = [
-            {key: value for key, value in fact.items()}
-            for fact in topic["topic_source_facts"]
-        ]
+        candidate = topic["candidate"]
+        source_presence = candidate.get("source_presence", {})
+        if isinstance(source_presence, Mapping) and source_presence:
+            source_names = sorted(str(source) for source in source_presence)
+        elif isinstance(source_presence, list) and source_presence:
+            source_names = sorted(str(source) for source in source_presence)
+        else:
+            source_names = sorted(str(source) for source in pack["sources"])
+        provenance = topic["accepted_y31"]
+        evidence_ref = provenance["evidence_pack_ref"]
         return {
             "topic_key": topic_key,
-            "topic_display": topic["candidate"]["topic_display"],
-            "candidate": topic["candidate"],
-            "topic_source_facts": facts,
-            "evidence_pack": {
-                "topic_key": pack["topic_key"],
-                "candidate_class": pack["candidate_class"],
-                "research_eligible": pack["research_eligible"],
-                "sources": sources,
-                "topic_schema_version": pack["topic_schema_version"],
+            "topic_display": candidate["topic_display"],
+            "candidate_class": pack["candidate_class"],
+            "source_presence": source_names,
+            "examples": _member_examples(
+                topic,
+                pair_shared_identities,
+            ),
+            "provenance": {
+                "yee31_run_id": provenance.get("run_id"),
+                "yee31_state_sha256": provenance.get("state_sha256"),
+                "yee31_question_set_sha256": provenance.get("question_set_sha256"),
+                "yee30_retrieval_db_sha256": evidence_ref.get("retrieval_db_sha256"),
             },
-            "accepted_y31_provenance": topic["accepted_y31"],
         }
 
-    lexical = {
-        key: pair[key]
-        for key in (
-            "normalized_edit_similarity",
-            "token_jaccard",
-            "evidence_overlap_count",
-            "shared_canonical_identities",
-            "blocking_reasons",
-            "pair_generation_version",
-            "pair_normalization_version",
-        )
-    }
     return {
+        "pair_state_version": PAIR_STATE_VERSION,
         "pair_id": pair["pair_id"],
         "left": member(pair["left_topic_key"]),
         "right": member(pair["right_topic_key"]),
-        "lexical_features": lexical,
-        "accepted_inputs": dict(sorted(pair["input_hashes"].items())),
     }
 
 
@@ -729,6 +820,7 @@ def normalize_pair_response(
         "right_topic_key": pair["right_topic_key"],
         "returned_model": envelope["model"],
         "concept_relation": answers["concept_relation"],
+        "merge_disposition": answers["merge_disposition"],
         "merge_safe": answers["merge_safe"],
         "lexical_alias": answers["lexical_alias"],
         "evidence_alignment": answers["evidence_alignment"],
@@ -862,7 +954,11 @@ class PairAdjudicationRunner:
         self.connection.commit()
 
     def _request(self, pair: Mapping[str, Any], state: Mapping[str, Any], replicate_id: str | None) -> tuple[InferenceRequest, str]:
+        if state.get("pair_state_version") != PAIR_STATE_VERSION:
+            raise InputIntegrityError("YEE-37 request state is not pair_state v0.2")
         state_json = canonical_json(state)
+        if len(state_json.encode("utf-8")) > PAIR_STATE_MAX_BYTES:
+            raise InputIntegrityError("YEE-37 pair_state v0.2 exceeds the 16 KiB request-state bound")
         body = canonical_json({
             "model": self.provider.model_identifier,
             "state": state,
@@ -881,6 +977,8 @@ class PairAdjudicationRunner:
             "transport_config": dict(self.provider.transport_config),
             "inference_parameters": self.run_metadata.get("inference_parameters", {}),
             "pair_generation_version": PAIR_GENERATION_VERSION,
+            "pair_state_version": PAIR_STATE_VERSION,
+            "pair_question_set_version": PAIR_QUESTION_SET_VERSION,
             "pair_policy_version": PAIR_POLICY_VERSION,
             "pair_output_version": PAIR_OUTPUT_VERSION,
             "replicate_id": replicate_id,
@@ -1003,6 +1101,21 @@ class PairAdjudicationRunner:
         if run["status"] == "failed" and run["last_error"] and "model version mismatch" in run["last_error"]:
             raise ModelVersionMismatchError(self.provider.model_version, "previously mismatched model")
 
+        terminal = self.connection.execute(
+            "SELECT attempt_no FROM pair_attempts WHERE cache_key=? "
+            "AND stage='terminal_max_tokens_exceeded' ORDER BY attempt_no LIMIT 1",
+            (cache_key,),
+        ).fetchone()
+        if terminal is not None:
+            return {
+                "pair_id": pair["pair_id"],
+                "cache_key": cache_key,
+                "replicate_id": replicate_id,
+                "status": "failed",
+                "normalized": None,
+                "error": run["last_error"] or "max_tokens_exceeded is terminal for this cache identity",
+            }
+
         saved = self.connection.execute(
             "SELECT attempt_no,raw_response FROM pair_attempts "
             "WHERE cache_key=? AND stage='raw_saved' ORDER BY attempt_no DESC LIMIT 1",
@@ -1067,15 +1180,23 @@ class PairAdjudicationRunner:
                 )
             except Exception as exc:
                 message = str(exc) if isinstance(exc, JevTransportError) else "provider call failed"
+                terminal_max_tokens = _is_terminal_max_tokens_error(exc)
                 self.connection.execute(
-                    "UPDATE pair_attempts SET stage='provider_error',error=? WHERE cache_key=? AND attempt_no=?",
-                    (message, cache_key, attempts),
+                    "UPDATE pair_attempts SET stage=?,error=? WHERE cache_key=? AND attempt_no=?",
+                    (
+                        "terminal_max_tokens_exceeded" if terminal_max_tokens else "provider_error",
+                        message,
+                        cache_key,
+                        attempts,
+                    ),
                 )
                 self.connection.execute(
                     "UPDATE pair_runs SET status='failed',last_error=? WHERE cache_key=?",
                     (message, cache_key),
                 )
                 self.connection.commit()
+                if terminal_max_tokens:
+                    break
                 if attempts < self.max_attempts:
                     time.sleep(self.retry_delays[min(attempts - 1, len(self.retry_delays) - 1)] if self.retry_delays else 0)
                 continue
@@ -1257,6 +1378,9 @@ def build_stability_report(
             "status": "complete",
             "policy_decisions": policies,
             "relations": relations,
+            "merge_dispositions": [
+                row["merge_disposition"]["choice"] for row in normalized
+            ],
             "merge_safe_values": [row["merge_safe"]["noul"] for row in normalized],
             "replicate_cache_keys": [row["cache_key"] for row in normalized],
         })
@@ -1327,6 +1451,9 @@ def build_pilot_report(
     ]
     decisions = Counter(row["normalized"]["policy_decision"] for row in successful)
     native_relations = Counter(row["normalized"]["concept_relation"]["choice"] for row in successful)
+    native_dispositions = Counter(
+        row["normalized"]["merge_disposition"]["choice"] for row in successful
+    )
     returned_models = Counter(row["normalized"]["returned_model"] for row in successful)
     sentinel_results = []
     for pair_id, pair in sorted(by_id.items()):
@@ -1386,6 +1513,7 @@ def build_pilot_report(
         "http_attempts": sum(int(row.get("attempt_count", 0)) for row in outcomes),
         "policy_decision_counts": dict(sorted(decisions.items())),
         "native_relation_counts": dict(sorted(native_relations.items())),
+        "native_merge_disposition_counts": dict(sorted(native_dispositions.items())),
         "returned_model_distribution": dict(sorted(returned_models.items())),
         "sentinel_results": sentinel_results,
         "manual_audit_count": len(manual_audit),
@@ -1475,6 +1603,7 @@ def deterministic_manual_audit_sample(
             "evidence_overlap_count": by_pair[pair_id]["evidence_overlap_count"],
             "sentinel_expectations": by_pair[pair_id]["sentinel_expectations"],
             "model_relation": completed[pair_id]["normalized"]["concept_relation"]["choice"],
+            "model_merge_disposition": completed[pair_id]["normalized"]["merge_disposition"]["choice"],
             "model_merge_safe": completed[pair_id]["normalized"]["merge_safe"]["noul"],
             "model_policy_decision": completed[pair_id]["normalized"]["policy_decision"],
             "manual_relation": None,
