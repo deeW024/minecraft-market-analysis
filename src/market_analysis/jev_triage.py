@@ -24,6 +24,7 @@ from typesafe_sdk import RetryPolicy, TypeSafeClient
 QUESTION_SET_VERSION = "yee-31-native-questions-v0.2"
 DERIVED_OUTPUT_VERSION = "yee-31-deterministic-output-v0.2"
 DECISION_POLICY_VERSION = "yee-31-topic-quality-policy-v1"
+EXPECTED_JEV_MODEL_VERSION = "jev-1.13.0"
 EXPECTED_INPUT_COUNTS = {
     "resource_corpus": 169_007,
     "topic_source_facts": 8_095,
@@ -56,6 +57,15 @@ VERCEL_MODEL = "typesafe-ai/jev"
 
 class TriageValidationError(ValueError):
     """A native Jev response does not satisfy the typed contract."""
+
+
+class ModelVersionMismatchError(TriageValidationError):
+    """The provider returned a concrete Jev version other than the pinned version."""
+
+    def __init__(self, expected: str, returned: str) -> None:
+        self.expected = expected
+        self.returned = returned
+        super().__init__(f"returned Jev model version mismatch: expected {expected!r}, received {returned!r}")
 
 
 class InputIntegrityError(ValueError):
@@ -122,13 +132,14 @@ class JEVProviderAdapter:
         model_identifier: str,
         transport_id: str,
         transport_config: Mapping[str, Any],
+        expected_model_version: str,
     ) -> None:
-        if not callable(transport) or not model_identifier or not transport_id:
-            raise ValueError("a Jev transport, requested model, and transport identity are required")
+        if not callable(transport) or not model_identifier or not transport_id or not expected_model_version:
+            raise ValueError("a Jev transport, requested model, expected version, and transport identity are required")
         self._transport = transport
         self.model_identifier = model_identifier
-        # The alias is for cache/run identity; every response records the concrete model.
-        self.model_version = model_identifier
+        self.expected_model_version = expected_model_version
+        self.model_version = expected_model_version
         self.transport_id = transport_id
         self.transport_config = dict(transport_config)
 
@@ -405,7 +416,9 @@ def jev_provider_from_env(
     else:
         raise ValueError("JEV_TRANSPORT must be 'typesafe' or 'vercel-typesafe'")
     config = {"base_url": transport.base_url, "timeout_seconds": transport.timeout}
-    return JEVProviderAdapter(transport, model, transport.transport_id, config)
+    return JEVProviderAdapter(
+        transport, model, transport.transport_id, config, EXPECTED_JEV_MODEL_VERSION
+    )
 
 
 def canonical_json(value: Any) -> str:
@@ -551,12 +564,23 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def parse_response(raw_body: bytes, expected_questions: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def parse_response(
+    raw_body: bytes,
+    expected_questions: Mapping[str, Any] | None = None,
+    expected_model_version: str | None = None,
+) -> dict[str, Any]:
     try:
         decoded = raw_body.decode("utf-8", errors="strict")
         value = json.loads(decoded, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise TriageValidationError(f"response is not strict UTF-8 JSON: {exc}") from exc
+    if (
+        expected_model_version is not None
+        and isinstance(value, dict)
+        and isinstance(value.get("model"), str)
+        and value["model"] != expected_model_version
+    ):
+        raise ModelVersionMismatchError(expected_model_version, value["model"])
     return validate_response(value, expected_questions)
 
 
@@ -715,8 +739,7 @@ def evaluate_pilot_gates(
         "exact_pilot_size": len(results) == expected_count,
         "native_answer_contract_valid_rate_ge_99_percent": valid_share >= 0.99,
         "concrete_model_identity_present": all(
-            isinstance(row["normalized"].get("model_identity", {}).get("returned_model"), str)
-            and row["normalized"]["model_identity"]["returned_model"]
+            row["normalized"].get("model_identity", {}).get("returned_model") == EXPECTED_JEV_MODEL_VERSION
             for row in completed
         ),
         "raw_request_and_response_persisted": all(
@@ -1156,7 +1179,7 @@ class TriageRunner:
         request_sha256: str,
     ) -> dict[str, Any] | None:
         try:
-            envelope = parse_response(raw_response, self.questions)
+            envelope = parse_response(raw_response, self.questions, self.provider.model_version)
             run = self.connection.execute("SELECT input_sha256 FROM candidate_runs WHERE cache_key=?", (cache_key,)).fetchone()
             normalized = normalize_native_response(
                 envelope,
@@ -1175,6 +1198,8 @@ class TriageRunner:
             self.connection.execute(
                 "UPDATE candidate_runs SET status='failed',last_error=? WHERE cache_key=?", (str(exc), cache_key)
             )
+            if isinstance(exc, ModelVersionMismatchError):
+                raise
             return None
         normalized["raw_evidence"]["selected_attempt_no"] = attempt_no
         normalized_json = canonical_json(normalized)
@@ -1245,7 +1270,7 @@ class TriageRunner:
                     replay_attempts.append(record)
                     continue
                 try:
-                    envelope = parse_response(raw_response, self.questions)
+                    envelope = parse_response(raw_response, self.questions, self.provider.model_version)
                 except TriageValidationError as exc:
                     error = str(exc)
                     record.update({"validation_status": "invalid", "error": error})
@@ -1317,6 +1342,16 @@ class TriageRunner:
         run = self.connection.execute("SELECT * FROM candidate_runs WHERE cache_key=?", (cache_key,)).fetchone()
         if run["status"] == "completed":
             return {"topic_key": topic_key, "cache_key": cache_key, "status": "completed", "normalized": json.loads(run["normalized_json"])}
+        if run["status"] == "failed" and str(run["last_error"]).startswith("returned Jev model version mismatch:"):
+            saved_mismatch = self.connection.execute(
+                "SELECT raw_response FROM candidate_attempts WHERE cache_key=? AND error=? "
+                "ORDER BY attempt_no DESC LIMIT 1",
+                (cache_key, run["last_error"]),
+            ).fetchone()
+            if saved_mismatch is not None and saved_mismatch["raw_response"] is not None:
+                envelope = parse_response(saved_mismatch["raw_response"], self.questions)
+                raise ModelVersionMismatchError(self.provider.model_version, envelope["model"])
+            raise TriageValidationError(run["last_error"])
 
         # Recover an exact raw response left between durable capture and parsing.
         saved = self.connection.execute(

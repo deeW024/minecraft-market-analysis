@@ -9,6 +9,7 @@ import typesafe_sdk._core.transport as sdk_transport
 
 from market_analysis.jev_triage import (
     DERIVED_OUTPUT_VERSION,
+    EXPECTED_JEV_MODEL_VERSION,
     EXPECTED_INPUT_COUNTS,
     QUESTION_IDS,
     QUESTION_SET_VERSION,
@@ -16,6 +17,7 @@ from market_analysis.jev_triage import (
     JevTransportError,
     JEVProviderAdapter,
     MissingCredentialError,
+    ModelVersionMismatchError,
     ProviderResponse,
     RawEvidenceCapture,
     TriageRunner,
@@ -131,7 +133,7 @@ def _set_choice(envelope, question_id, choice):
 class FixtureReasoner:
     provider_id = "JEV"
     model_identifier = "jev-latest"
-    model_version = "jev-latest"
+    model_version = EXPECTED_JEV_MODEL_VERSION
     transport_id = "fixture-native-typesafe-v1"
     transport_config = {"base_url": "https://fixture.invalid", "timeout_seconds": 5.0}
 
@@ -482,6 +484,7 @@ def test_sdk_wire_bytes_are_persisted_before_dispatch_and_parse(tmp_path, monkey
         "jev-latest",
         transport.transport_id,
         {"base_url": transport.base_url, "timeout_seconds": transport.timeout},
+        EXPECTED_JEV_MODEL_VERSION,
     )
     real_parse_response = sdk_transport.parse_response
 
@@ -537,7 +540,7 @@ def test_transport_error_is_sanitized_before_sqlite_and_exports(tmp_path):
     )
     provider = JEVProviderAdapter(transport, "jev-latest", transport.transport_id, {
         "base_url": transport.base_url, "timeout_seconds": transport.timeout,
-    })
+    }, EXPECTED_JEV_MODEL_VERSION)
     with _runner(tmp_path, provider, max_attempts=1) as runner:
         failed = runner.run_candidate(candidate)
         exports = runner.export_payloads()
@@ -571,7 +574,126 @@ def test_provider_identity_is_bound_to_question_set_and_transport():
     assert metadata["question_set_version"] == QUESTION_SET_VERSION
     assert metadata["question_set_sha256"] == load_contract()[1]
     assert metadata["transport_id"] == provider.transport_id
+    assert metadata["model_identifier"] == "jev-latest"
+    assert metadata["model_version"] == EXPECTED_JEV_MODEL_VERSION
     assert SECRET not in canonical_json(metadata)
+
+
+@pytest.mark.parametrize(
+    ("transport", "credential_name", "requested_model"),
+    (("typesafe", "TYPESAFE_API_KEY", "jev-latest"),
+     ("vercel-typesafe", "AI_GATEWAY_API_KEY", "typesafe-ai/jev")),
+)
+def test_environment_provider_pins_concrete_model_separately_from_alias(transport, credential_name, requested_model):
+    provider = jev_provider_from_env(
+        {"JEV_TRANSPORT": transport, credential_name: SECRET},
+        http_transport=httpx2.MockTransport(lambda _request: httpx2.Response(200)),
+    )
+    try:
+        assert provider.model_identifier == requested_model
+        assert provider.expected_model_version == EXPECTED_JEV_MODEL_VERSION
+        assert provider.model_version == EXPECTED_JEV_MODEL_VERSION
+    finally:
+        provider.close()
+
+
+def test_concrete_model_version_separates_cache_identity_and_run_metadata(tmp_path):
+    candidate_json = canonical_json(_candidate())
+    first = FixtureReasoner([])
+    second = FixtureReasoner([])
+    second.model_version = "jev-1.14.0"
+
+    with _runner(tmp_path, first, database="version-113.db") as runner:
+        first_key, _, _ = runner._ensure_run_record(candidate_json, None)
+        first_metadata = {
+            row["key"]: json.loads(row["value_json"])
+            for row in runner.connection.execute("SELECT key,value_json FROM run_metadata")
+        }
+        first_db_version = runner.connection.execute(
+            "SELECT model_version FROM candidate_runs WHERE cache_key=?", (first_key,)
+        ).fetchone()[0]
+
+    with _runner(tmp_path, second, database="version-114.db") as runner:
+        second_key, _, _ = runner._ensure_run_record(candidate_json, None)
+        second_db_version = runner.connection.execute(
+            "SELECT model_version FROM candidate_runs WHERE cache_key=?", (second_key,)
+        ).fetchone()[0]
+
+    assert first_metadata["model_identifier"] == "jev-latest"
+    assert first_metadata["model_version"] == EXPECTED_JEV_MODEL_VERSION
+    assert first_db_version == EXPECTED_JEV_MODEL_VERSION
+    assert second_db_version == "jev-1.14.0"
+    assert first_key != second_key
+
+
+def test_matching_concrete_model_version_completes_normally(tmp_path):
+    candidate = _candidate("model-match")
+    reasoner = FixtureReasoner([_native_envelope(candidate, model=EXPECTED_JEV_MODEL_VERSION)])
+    with _runner(tmp_path, reasoner, max_attempts=2) as runner:
+        result = runner.run_candidate(candidate)
+        row = runner.connection.execute(
+            "SELECT r.status,r.model_version,a.stage,a.raw_response FROM candidate_runs r "
+            "JOIN candidate_attempts a USING(cache_key)"
+        ).fetchone()
+
+    assert result["status"] == "completed"
+    assert row["status"] == "completed"
+    assert row["model_version"] == EXPECTED_JEV_MODEL_VERSION
+    assert row["stage"] == "completed"
+    assert json.loads(reasoner.requests[0].body)["model"] == "jev-latest"
+    assert len(reasoner.requests) == 1
+
+
+def test_model_version_mismatch_aborts_full_run_without_retry_or_next_candidate(tmp_path, monkeypatch):
+    monkeypatch.setitem(EXPECTED_INPUT_COUNTS, "eligible_evidence_packs", 2)
+    first_candidate = _candidate("model-mismatch-first")
+    second_candidate = _candidate("model-mismatch-second")
+    mismatch = canonical_json(_native_envelope(first_candidate, model="jev-1.14.0"))
+    reasoner = FixtureReasoner([mismatch, _native_envelope(second_candidate)])
+    pilot_report = {
+        "status": "PASS",
+        "candidate_count": 120,
+        "native_contract_valid_count": 120,
+        "native_contract_valid_rate": 1.0,
+        "manual_audit_count": 30,
+        "gates": {
+            "exact_pilot_size": True,
+            "native_answer_contract_valid_rate_ge_99_percent": True,
+            "concrete_model_identity_present": True,
+            "raw_request_and_response_persisted": True,
+            "no_unknown_question_ids": True,
+            "zero_out_of_contract_labels": True,
+            "zero_unsupported_external_calls": True,
+            "manual_audit_at_least_30_and_covers_decisions": True,
+        },
+    }
+
+    with _runner(tmp_path, reasoner, max_attempts=2) as runner:
+        with pytest.raises(ModelVersionMismatchError, match="expected 'jev-1.13.0', received 'jev-1.14.0'"):
+            runner.run_full([first_candidate, second_candidate], pilot_report)
+        failed = runner.connection.execute(
+            "SELECT r.status,r.last_error,a.stage,a.raw_response FROM candidate_runs r "
+            "JOIN candidate_attempts a USING(cache_key) WHERE r.topic_key=?",
+            (first_candidate["topic_key"],),
+        ).fetchone()
+        second_status = runner.connection.execute(
+            "SELECT status FROM candidate_runs WHERE topic_key=?", (second_candidate["topic_key"],)
+        ).fetchone()[0]
+        second_attempts = runner.connection.execute(
+            "SELECT COUNT(*) FROM candidate_attempts WHERE cache_key IN "
+            "(SELECT cache_key FROM candidate_runs WHERE topic_key=?)",
+            (second_candidate["topic_key"],),
+        ).fetchone()[0]
+        with pytest.raises(ModelVersionMismatchError):
+            runner.run_candidate(first_candidate)
+
+    assert len(reasoner.requests) == 1
+    assert failed["status"] == "failed"
+    assert "model version mismatch" in failed["last_error"]
+    assert failed["stage"] == "parse_error"
+    assert failed["raw_response"] == mismatch.encode("utf-8")
+    assert second_status == "pending"
+    assert second_attempts == 0
 
 
 def test_pilot_and_stability_samples_remain_deterministic_and_stratified():
