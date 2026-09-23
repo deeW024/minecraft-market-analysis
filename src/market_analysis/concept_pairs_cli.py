@@ -260,6 +260,18 @@ def _assert_terminal_outcomes(results: list[Mapping[str, Any]], label: str) -> N
         )
 
 
+def _acceptance_gate_status(
+    pilot_report: Mapping[str, Any],
+    stability_report: Mapping[str, Any],
+) -> str:
+    return (
+        "PASS"
+        if pilot_report.get("status") == "PASS"
+        and all((stability_report.get("gates") or {}).values())
+        else "FAIL"
+    )
+
+
 def _probability_qa(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
     by_question: dict[str, list[float]] = {}
     for row in rows:
@@ -344,6 +356,7 @@ def _write_report(
         "# YEE-37 Candidate-Pair Pilot",
         "",
         f"Status: {metadata['status']}",
+        f"Acceptance gates: {metadata['acceptance_gate_status']}",
         "",
         f"Run ID: {metadata['run_id']}",
         f"Code commit: {metadata['code_commit']}",
@@ -411,6 +424,7 @@ def _artifact_manifest(output_dir: Path, metadata: Mapping[str, Any]) -> dict[st
     return {
         "work_order": "YEE-37",
         "status": metadata["status"],
+        "acceptance_gate_status": metadata["acceptance_gate_status"],
         "run_id": metadata["run_id"],
         "code_commit": metadata["code_commit"],
         "input_hashes": metadata["input_hashes"],
@@ -658,15 +672,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             manual_audit = _combine_manual_audit(manual_worklist, manual_results_path)
             pilot_report = build_pilot_report(pilot_pairs, pilot_outcomes, manual_audit)
             stability_report = build_stability_report(stability_pairs, stability_outcomes)
-            status = (
-                "PAIR_PILOT_READY_FOR_SUPERVISOR_REVIEW"
-                if pilot_report["status"] == "PASS"
-                and all(stability_report["gates"].values())
-                else "PILOT_GATES_FAILED_REVIEW_REQUIRED"
-            )
+            status = "PAIR_PILOT_READY_FOR_SUPERVISOR_REVIEW"
+            acceptance_gate_status = _acceptance_gate_status(pilot_report, stability_report)
             report_metadata = {
                 **metadata,
                 "artifact_finalization_code_commit": code_commit,
+                "acceptance_gate_status": acceptance_gate_status,
                 "status": status,
             }
             _write_jsonl(output_dir / "PILOT_OUTCOMES.jsonl", pilot_outcomes, rebuild=True)
@@ -689,6 +700,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 raise RuntimeError("accepted YEE-31/YEE-30 input changed during YEE-37 execution")
             qa_summary = {
                 "status": status,
+                "acceptance_gate_status": acceptance_gate_status,
                 "input_hashes_before_after": {
                     "yee31_advance_review_set": {
                         "before": input_hashes["yee31_advance_review_set_sha256"],
@@ -717,6 +729,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         provider.close()
     return {
         "status": status,
+        "acceptance_gate_status": acceptance_gate_status,
         "run_id": run_id,
         "candidate_pair_count": len(pairs),
         "pilot_status": pilot_report["status"],

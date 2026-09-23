@@ -5,6 +5,7 @@ import pytest
 
 import market_analysis.concept_pairs as pairs_module
 from market_analysis.concept_pairs_cli import (
+    _acceptance_gate_status,
     _assert_terminal_outcomes,
     _reuse_persisted_run_metadata,
 )
@@ -39,6 +40,17 @@ def test_offline_finalize_accepts_terminal_failures_but_rejects_running_rows():
     )
     with pytest.raises(RuntimeError, match="nonterminal pilot outcomes"):
         _assert_terminal_outcomes([{"status": "running"}], "pilot")
+
+
+def test_supervisor_review_status_keeps_failed_acceptance_gates_explicit():
+    assert _acceptance_gate_status(
+        {"status": "FAIL"},
+        {"gates": {"stability": False}},
+    ) == "FAIL"
+    assert _acceptance_gate_status(
+        {"status": "PASS"},
+        {"gates": {"stability": True, "sentinels": True}},
+    ) == "PASS"
 
 
 def test_offline_finalize_reuses_verified_run_identity_across_finalizer_commits(tmp_path):
