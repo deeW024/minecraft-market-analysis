@@ -36,6 +36,112 @@ def test_authorized_cli_has_pair_runner_and_coherence_state_builder():
     assert production_cli.build_pair_state is build_pair_state
 
 
+def test_execution_commit_guard_fails_closed_on_unapproved_head(monkeypatch):
+    execution_commit = "f" * 40
+    monkeypatch.setattr(production_cli, "_current_git_head", lambda: execution_commit)
+
+    assert production_cli._resolve_execution_code_commit(execution_commit) == execution_commit
+    with pytest.raises(ProductionPreflightError, match="does not match the authorized execution commit"):
+        production_cli._resolve_execution_code_commit("e" * 40)
+
+
+def test_finalization_preserves_preflight_and_execution_commits_separately(tmp_path):
+    preflight_commit = "acc70a0f544fa4214c0387ff69c5f47cfdc0441a"
+    execution_commit = "f9c23cfc2ba8426d1e214690619b4269713db9c3"
+    questions, question_sha = load_pair_questions()
+    database = tmp_path / "production.sqlite"
+    run_id = "execution-provenance-test"
+    runner_metadata = {
+        "run_id": run_id,
+        "work_order": "YEE-37",
+        "code_commit": preflight_commit,
+        "inference_parameters": {},
+    }
+    production_metadata = {
+        "run_id": run_id,
+        "code_commit": preflight_commit,
+        "yee31_run_id": "accepted-y31-run",
+        "source_run_id": "accepted-v02-run",
+        "source_database_sha256": "c" * 64,
+    }
+    with PairAdjudicationRunner(
+        database, _Provider(), questions, question_sha, runner_metadata
+    ) as runner:
+        runner.connection.execute(
+            "CREATE TABLE production_run_metadata(run_id TEXT PRIMARY KEY,metadata_json TEXT NOT NULL)"
+        )
+        runner.connection.execute(
+            "INSERT INTO production_run_metadata VALUES (?,?)",
+            (run_id, canonical_json(production_metadata)),
+        )
+        runner.connection.execute(
+            "CREATE TABLE seed_provenance(cache_key TEXT PRIMARY KEY,source_attempt_count INTEGER NOT NULL)"
+        )
+        runner.connection.execute(
+            "CREATE TABLE pair_resolutions(pair_id TEXT PRIMARY KEY,derived_json TEXT NOT NULL)"
+        )
+        runner.connection.commit()
+
+    production_cli._record_execution_provenance(
+        database, run_id, preflight_commit, execution_commit
+    )
+    before = sqlite3.connect(database)
+    before_run_metadata = before.execute(
+        "SELECT metadata_json FROM production_run_metadata WHERE run_id=?", (run_id,)
+    ).fetchone()[0]
+    before_cache_metadata = before.execute(
+        "SELECT value_json FROM run_metadata WHERE key='code_commit'"
+    ).fetchone()[0]
+    before.close()
+
+    input_hashes = {
+        "yee31_advance_review_set_sha256": "d" * 64,
+        "yee30_retrieval_db_sha256": "e" * 64,
+    }
+    production_cli._finalize_production_exports(
+        database,
+        tmp_path,
+        {"only-topic": _topic("only-topic", 1)},
+        [],
+        input_hashes,
+        None,
+        execution_code_commit=execution_commit,
+    )
+
+    qa = json.loads((tmp_path / "PRODUCTION_FINAL_QA.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
+    report = (tmp_path / "FINAL_REPORT.md").read_text(encoding="utf-8")
+    assert qa["preflight_code_commit"] == preflight_commit
+    assert qa["execution_code_commit"] == execution_commit
+    assert manifest["preflight_code_commit"] == preflight_commit
+    assert manifest["execution_code_commit"] == execution_commit
+    assert f"Preflight code commit: `{preflight_commit}`" in report
+    assert f"Execution code commit: `{execution_commit}`" in report
+
+    retrieval = sqlite3.connect(tmp_path / "concept_retrieval.sqlite")
+    retrieval_metadata = {
+        key: json.loads(value)
+        for key, value in retrieval.execute("SELECT key,value_json FROM metadata")
+    }
+    retrieval.close()
+    assert retrieval_metadata["preflight_code_commit"] == preflight_commit
+    assert retrieval_metadata["execution_code_commit"] == execution_commit
+
+    after = sqlite3.connect(database)
+    assert after.execute(
+        "SELECT metadata_json FROM production_run_metadata WHERE run_id=?", (run_id,)
+    ).fetchone()[0] == before_run_metadata
+    assert after.execute(
+        "SELECT value_json FROM run_metadata WHERE key='code_commit'"
+    ).fetchone()[0] == before_cache_metadata
+    provenance = after.execute(
+        "SELECT preflight_code_commit,execution_code_commit FROM production_execution_provenance WHERE run_id=?",
+        (run_id,),
+    ).fetchone()
+    after.close()
+    assert tuple(provenance) == (preflight_commit, execution_commit)
+
+
 class _Provider:
     provider_id = "JEV"
     model_identifier = EXPECTED_MODEL_ALIAS

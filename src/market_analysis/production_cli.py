@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import sqlite3
 import subprocess
 import tempfile
@@ -54,6 +55,8 @@ from .production_pipeline import (
     plan_representative_coherence_edges,
 )
 
+ACCEPTED_PREFLIGHT_CODE_COMMIT = "acc70a0f544fa4214c0387ff69c5f47cfdc0441a"
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -101,6 +104,74 @@ def _db_metadata(database: Path) -> dict[str, Any]:
             row["key"]: json.loads(row["value_json"])
             for row in connection.execute("SELECT key,value_json FROM run_metadata")
         }
+    finally:
+        connection.close()
+
+
+def _current_git_head() -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _resolve_execution_code_commit(authorized_execution_commit: str | None) -> str:
+    if not isinstance(authorized_execution_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", authorized_execution_commit):
+        raise ProductionPreflightError("a full authorized execution commit SHA is required")
+    current_head = _current_git_head()
+    if current_head != authorized_execution_commit:
+        raise ProductionPreflightError("current Git HEAD does not match the authorized execution commit")
+    return current_head
+
+
+def _record_execution_provenance(
+    database: Path,
+    run_id: str,
+    preflight_code_commit: str,
+    execution_code_commit: str,
+) -> None:
+    if preflight_code_commit != ACCEPTED_PREFLIGHT_CODE_COMMIT:
+        raise ProductionPreflightError("accepted preflight code commit does not match the authorized baseline")
+    if not re.fullmatch(r"[0-9a-f]{40}", execution_code_commit):
+        raise ProductionPreflightError("execution code commit is not a full Git SHA")
+    connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
+    try:
+        production_row = connection.execute(
+            "SELECT metadata_json FROM production_run_metadata WHERE run_id=?", (run_id,)
+        ).fetchone()
+        if production_row is None:
+            raise ProductionPreflightError("accepted production metadata is missing for execution provenance")
+        production_metadata = json.loads(production_row["metadata_json"])
+        if production_metadata.get("code_commit") != preflight_code_commit:
+            raise ProductionPreflightError("production run identity no longer matches its preflight code commit")
+        cached_code_row = connection.execute(
+            "SELECT value_json FROM run_metadata WHERE key='code_commit'"
+        ).fetchone()
+        if cached_code_row is None or json.loads(cached_code_row["value_json"]) != preflight_code_commit:
+            raise ProductionPreflightError("pair cache metadata no longer matches its preflight code commit")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS production_execution_provenance ("
+            "run_id TEXT NOT NULL,preflight_code_commit TEXT NOT NULL,execution_code_commit TEXT NOT NULL,"
+            "PRIMARY KEY(run_id,execution_code_commit))"
+        )
+        existing = connection.execute(
+            "SELECT preflight_code_commit FROM production_execution_provenance "
+            "WHERE run_id=? AND execution_code_commit=?",
+            (run_id, execution_code_commit),
+        ).fetchone()
+        if existing and existing["preflight_code_commit"] != preflight_code_commit:
+            raise ProductionPreflightError("execution provenance conflicts with an existing append-only record")
+        connection.execute(
+            "INSERT OR IGNORE INTO production_execution_provenance "
+            "(run_id,preflight_code_commit,execution_code_commit) VALUES (?,?,?)",
+            (run_id, preflight_code_commit, execution_code_commit),
+        )
+        connection.commit()
     finally:
         connection.close()
 
@@ -274,6 +345,7 @@ def _persist_resolutions(
 
 def run_authorized_production(args: argparse.Namespace) -> dict[str, Any]:
     """Resume all base pairs, then separately adjudicate required coherence edges."""
+    execution_code_commit = _resolve_execution_code_commit(args.authorized_execution_commit)
     advance_path = Path(args.advance_set).resolve()
     y30_db = Path(args.input_db).resolve()
     output_dir = Path(args.output_dir).resolve()
@@ -296,6 +368,9 @@ def run_authorized_production(args: argparse.Namespace) -> dict[str, Any]:
         raise ProductionPreflightError("production base pair universe differs from accepted input reconstruction")
     questions, question_sha = load_pair_questions()
     runner_metadata = _db_metadata(database)
+    preflight_code_commit = runner_metadata.get("code_commit")
+    if preflight_code_commit != ACCEPTED_PREFLIGHT_CODE_COMMIT:
+        raise ProductionPreflightError("accepted production state has an unexpected preflight code commit")
     if runner_metadata.get("question_set_sha256") != question_sha:
         raise ProductionPreflightError("production DB question identity differs from checked-in contract")
     provider = jev_provider_from_env()
@@ -318,6 +393,12 @@ def run_authorized_production(args: argparse.Namespace) -> dict[str, Any]:
             max_attempts=args.max_attempts,
         ) as runner:
             runner.register_candidate_pairs(pairs)
+            _record_execution_provenance(
+                database,
+                str(runner_metadata["run_id"]),
+                preflight_code_commit,
+                execution_code_commit,
+            )
             base_results = runner.run_pairs(pairs, topics_by_key)
             _persist_resolutions(runner.connection, pairs, base_results)
             for _iteration in range(len(topics_by_key) + 1):
@@ -363,7 +444,9 @@ def run_authorized_production(args: argparse.Namespace) -> dict[str, Any]:
     }
     if before != after:
         raise ProductionPreflightError("accepted YEE-30/YEE-31 inputs changed during production run")
-    return _finalize_production_exports(database, output_dir, topics_by_key, pairs, before, args)
+    return _finalize_production_exports(
+        database, output_dir, topics_by_key, pairs, before, args, execution_code_commit
+    )
 
 
 def _resolution_map_for_registry(database: Path, registry: str) -> dict[str, dict[str, Any]]:
@@ -379,6 +462,7 @@ def _finalize_production_exports(
     expected_pairs: list[Mapping[str, Any]],
     input_hashes: Mapping[str, str],
     args: argparse.Namespace,
+    execution_code_commit: str,
 ) -> dict[str, Any]:
     base_pairs, base_runs = _registry_snapshot(database, "candidate_pairs")
     coherence_edges, coherence_runs = _registry_snapshot(database, "coherence_edges")
@@ -391,6 +475,14 @@ def _finalize_production_exports(
             "SELECT run_id,metadata_json FROM production_run_metadata ORDER BY run_id LIMIT 1"
         ).fetchone()
         production_metadata = json.loads(metadata_row["metadata_json"])
+        preflight_code_commit = production_metadata.get("code_commit")
+        execution_row = production_meta_connection.execute(
+            "SELECT preflight_code_commit FROM production_execution_provenance "
+            "WHERE run_id=? AND execution_code_commit=?",
+            (metadata_row["run_id"], execution_code_commit),
+        ).fetchone()
+        if execution_row is None or execution_row["preflight_code_commit"] != preflight_code_commit:
+            raise ProductionPreflightError("finalization is missing matching append-only execution provenance")
         base_status_counts = dict(production_meta_connection.execute(
             "SELECT status,count(*) FROM pair_runs WHERE pair_id IN (SELECT pair_id FROM candidate_pairs) AND replicate_id IS NULL GROUP BY status"
         ).fetchall())
@@ -420,6 +512,8 @@ def _finalize_production_exports(
         "family_build_version": FAMILY_BUILD_VERSION,
         "family_id_version": FAMILY_ID_VERSION,
         "coherence_edge_version": COHERENCE_EDGE_VERSION,
+        "preflight_code_commit": preflight_code_commit,
+        "execution_code_commit": execution_code_commit,
         "requested_model_alias": EXPECTED_MODEL_ALIAS,
         "expected_model_version": EXPECTED_MODEL_VERSION,
         "source_input_hashes": dict(input_hashes),
@@ -440,6 +534,8 @@ def _finalize_production_exports(
     execution = {
         "status": artifacts["qa"]["status"],
         "run_id": metadata_row["run_id"],
+        "preflight_code_commit": preflight_code_commit,
+        "execution_code_commit": execution_code_commit,
         "base_pair_status_counts": base_status_counts,
         "completed_seed_count": seed_count,
         "pending_base_pairs": base_status_counts.get("pending", 0),
@@ -459,6 +555,8 @@ def _finalize_production_exports(
         "",
         f"Status: `{artifacts['qa']['status']}`",
         "",
+        f"Preflight code commit: `{preflight_code_commit}`.",
+        f"Execution code commit: `{execution_code_commit}`.",
         f"Base pairs: {len(base_pairs):,}; outcomes: {canonical_json(base_status_counts)}.",
         f"Separate representative-coherence edges: {len(coherence_edges):,}; statuses: {canonical_json(artifacts['qa']['coherence_edge_status_counts'])}.",
         f"Families: {len(artifacts['concept_families']):,}; topics reconciled: {len(artifacts['concept_members']):,}/{len(topics_by_key):,}.",
@@ -792,6 +890,7 @@ def main() -> None:
     parser.add_argument("--v03-evidence-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--authorized-execution-commit")
     parser.add_argument(
         "--offline-preflight",
         action="store_true",
@@ -805,6 +904,10 @@ def main() -> None:
     args = parser.parse_args()
     if args.offline_preflight == args.run_authorized_production:
         parser.error("select exactly one of --offline-preflight or --run-authorized-production")
+    if args.offline_preflight and args.authorized_execution_commit:
+        parser.error("--authorized-execution-commit is only valid for authorized production runs")
+    if args.run_authorized_production and not args.authorized_execution_commit:
+        parser.error("--run-authorized-production requires --authorized-execution-commit")
     if args.offline_preflight:
         result = run_offline_preflight(args)
     else:
