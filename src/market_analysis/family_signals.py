@@ -58,16 +58,16 @@ COMMON_SIGNAL_FIELDS = (
     "downloads_total_p50",
     "downloads_total_p75",
     "downloads_total_p90",
-    "downloads_total_concentration_top1_share",
-    "downloads_total_concentration_top3_share",
-    "downloads_total_concentration_hhi",
+    "demand_concentration_top1_share",
+    "demand_concentration_top3_share",
+    "demand_concentration_hhi",
 )
 SOURCE_SIGNAL_FIELDS = {
     "voxel": (
         "voxel_review_count_p50", "voxel_review_count_p90",
         "voxel_review_stars_p50", "voxel_review_stars_p90",
-        "voxel_free_count", "voxel_paid_count", "voxel_unknown_state_count",
-        "voxel_paid_known_count", "voxel_paid_share_known",
+        "free_count", "paid_count", "unknown_paid_state_count",
+        "paid_known_count", "paid_share_known",
     ),
     "modrinth": ("modrinth_follow_count_p50", "modrinth_follow_count_p90"),
     "hangar": (
@@ -190,15 +190,15 @@ def aggregate_family_source(
     total = sum(download_values)
     if download_values and total > 0:
         ordered = sorted(download_values, reverse=True)
-        row["downloads_total_concentration_top1_share"] = round_number(ordered[0] / total)
-        row["downloads_total_concentration_top3_share"] = round_number(sum(ordered[:3]) / total)
-        row["downloads_total_concentration_hhi"] = round_number(
+        row["demand_concentration_top1_share"] = round_number(ordered[0] / total)
+        row["demand_concentration_top3_share"] = round_number(sum(ordered[:3]) / total)
+        row["demand_concentration_hhi"] = round_number(
             sum((value / total) ** 2 for value in download_values)
         )
     else:
-        row["downloads_total_concentration_top1_share"] = None
-        row["downloads_total_concentration_top3_share"] = None
-        row["downloads_total_concentration_hhi"] = None
+        row["demand_concentration_top1_share"] = None
+        row["demand_concentration_top3_share"] = None
+        row["demand_concentration_hhi"] = None
 
     for field in SOURCE_SIGNAL_FIELDS[source]:
         row[field] = None
@@ -221,11 +221,11 @@ def aggregate_family_source(
             "voxel_review_stars_p90": quantile(
                 [v for v in (_as_number(item.get("voxel_review_stars")) for item in members) if v is not None], 0.90
             ),
-            "voxel_free_count": counts["free"],
-            "voxel_paid_count": counts["paid"],
-            "voxel_unknown_state_count": counts["unknown_state"],
-            "voxel_paid_known_count": known,
-            "voxel_paid_share_known": _share(counts["paid"], known),
+            "free_count": counts["free"],
+            "paid_count": counts["paid"],
+            "unknown_paid_state_count": counts["unknown_state"],
+            "paid_known_count": known,
+            "paid_share_known": _share(counts["paid"], known),
         })
     elif source == "modrinth":
         row["modrinth_follow_count_p50"], row["modrinth_follow_count_p90"] = _stats(
@@ -354,7 +354,7 @@ def assemble_signal_rows(
             "evidence_example_identity_count": evidence_count,
             "evidence_coverage_share": _share(evidence_count, len(family_memberships)),
             "signal_source_count": len(source_rows),
-            "has_voxel_paid_evidence": bool(source_rows.get("voxel", {}).get("voxel_paid_count", 0) > 0),
+            "has_voxel_paid_evidence": bool(source_rows.get("voxel", {}).get("paid_count", 0) > 0),
             "cross_market_presence_class": {1: "single_source", 2: "two_source", 3: "three_source"}[len(presence)],
         }
         for source in SOURCE_ORDER:
@@ -764,7 +764,7 @@ def _semantic_reconciliation(rows: Mapping[str, Sequence[Mapping[str, Any]]]) ->
             presence_mismatches += 1
         if feature["resource_membership_count_total"] != memberships_by_family[family_id]:
             metadata_mismatches += 1
-        if feature["has_voxel_paid_evidence"] != bool(family_signals.get("voxel", {}).get("voxel_paid_count", 0) > 0):
+        if feature["has_voxel_paid_evidence"] != bool(family_signals.get("voxel", {}).get("paid_count", 0) > 0):
             metadata_mismatches += 1
         expected_coverage = _share(feature["evidence_example_identity_count"], memberships_by_family[family_id])
         if feature["evidence_coverage_share"] != expected_coverage:

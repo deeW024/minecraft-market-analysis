@@ -8,6 +8,7 @@ import pytest
 
 from market_analysis.family_signals import (
     EXPORT_TABLES,
+    SOURCE_SIGNAL_FIELDS,
     FamilySignalInputError,
     _csv_cell,
     _output_checks,
@@ -128,23 +129,23 @@ def test_metrics_are_source_local_and_preserve_null_zero_and_concentration():
     assert voxel["freshness_le90_count"] == 2
     assert voxel["freshness_gt365_count"] == 0
     assert voxel["downloads_total_p50"] == 100
-    assert voxel["downloads_total_concentration_top1_share"] == 0.75
-    assert voxel["downloads_total_concentration_top3_share"] == 1
-    assert voxel["downloads_total_concentration_hhi"] == 0.625
+    assert voxel["demand_concentration_top1_share"] == 0.75
+    assert voxel["demand_concentration_top3_share"] == 1
+    assert voxel["demand_concentration_hhi"] == 0.625
     assert modrinth["downloads_total_p50"] == 1000
-    assert modrinth["downloads_total_concentration_top1_share"] == 1
+    assert modrinth["demand_concentration_top1_share"] == 1
     assert hangar["downloads_total_p50"] == 50
     assert voxel["voxel_review_count_p50"] == 4
     assert voxel["voxel_review_stars_p50"] == 4
-    assert voxel["voxel_free_count"] == 1
-    assert voxel["voxel_paid_count"] == 2
-    assert voxel["voxel_unknown_state_count"] == 1
-    assert voxel["voxel_paid_known_count"] == 3
-    assert voxel["voxel_paid_share_known"] == 0.666667
+    assert voxel["free_count"] == 1
+    assert voxel["paid_count"] == 2
+    assert voxel["unknown_paid_state_count"] == 1
+    assert voxel["paid_known_count"] == 3
+    assert voxel["paid_share_known"] == 0.666667
     assert modrinth["modrinth_follow_count_p50"] == 100
     assert hangar["hangar_star_count_p50"] == 0
     assert hangar["hangar_recent_downloads_p50"] == 0
-    assert modrinth.get("voxel_paid_count") is None
+    assert modrinth.get("paid_count") is None
     assert _csv_cell(None) == r"\N"
     assert _csv_cell(0) == 0
 
@@ -155,14 +156,14 @@ def test_concentration_is_null_for_zero_or_missing_usable_total():
         _occurrence("f", "t", "voxel", "b", downloads_total=0),
     ]
     metrics = aggregate_family_source("f", "voxel", zero_rows)
-    assert metrics["downloads_total_concentration_top1_share"] is None
-    assert metrics["downloads_total_concentration_top3_share"] is None
-    assert metrics["downloads_total_concentration_hhi"] is None
+    assert metrics["demand_concentration_top1_share"] is None
+    assert metrics["demand_concentration_top3_share"] is None
+    assert metrics["demand_concentration_hhi"] is None
     assert metrics["downloads_total_p50"] == 0
     missing = aggregate_family_source("f", "voxel", [_occurrence("f", "t", "voxel", "c")])
     assert missing["demand_percentile_p50"] is None
     assert missing["freshness_age_days_p50"] is None
-    assert missing["downloads_total_concentration_hhi"] is None
+    assert missing["demand_concentration_hhi"] is None
 
 
 def test_voxel_price_signals_are_paid_and_currency_separated():
@@ -252,3 +253,36 @@ def test_export_tables_cover_required_deliverables():
     assert checks["voxel_price_duplicate_family_currency_count"] == 0
     assert checks["membership_provenance_mismatch_count"] == 0
     assert checks["forbidden_decision_field_count"] == 0
+
+
+def test_schema_contract_uses_authoritative_concentration_and_voxel_paid_names():
+    concentration = (
+        "demand_concentration_top1_share",
+        "demand_concentration_top3_share",
+        "demand_concentration_hhi",
+    )
+    voxel_paid = (
+        "free_count",
+        "paid_count",
+        "unknown_paid_state_count",
+        "paid_known_count",
+        "paid_share_known",
+    )
+    normalized = EXPORT_TABLES["family_source_signals"]
+    wide = EXPORT_TABLES["family_features"]
+    assert tuple(name for name in normalized if name.startswith("demand_concentration_")) == concentration
+    assert tuple(name for name in SOURCE_SIGNAL_FIELDS["voxel"] if name in voxel_paid) == voxel_paid
+    assert set(voxel_paid) <= set(normalized)
+    assert not {f"voxel_{name}" for name in voxel_paid} & set(normalized)
+    assert tuple(
+        name for name in wide
+        if name.endswith(("demand_concentration_top1_share", "demand_concentration_top3_share", "demand_concentration_hhi"))
+    ) == tuple(f"{source}_{field}" for source in ("voxel", "modrinth", "hangar") for field in concentration)
+    assert tuple(name for name in wide if name in {f"voxel_{field}" for field in voxel_paid}) == tuple(
+        f"voxel_{field}" for field in voxel_paid
+    )
+    assert not any("downloads_total_concentration_" in name for name in normalized + wide)
+    assert not any(name in normalized for name in (
+        "voxel_free_count", "voxel_paid_count", "voxel_unknown_state_count",
+        "voxel_paid_known_count", "voxel_paid_share_known",
+    ))
