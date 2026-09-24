@@ -142,6 +142,164 @@ def test_unresolved_family_requires_three_distinct_search_queries():
     assert any("lacks three query attempts" in error for error in qa["errors"])
 
 
+def _resolved_capture_with_required_queries():
+    capture = _capture()
+    family_id = research.PILOT_FAMILY_IDS[0]
+    pack = capture["families"][0]
+    pack.update({
+        "research_status": "RESOLVED",
+        "resolved_concept_name": "Example Minecraft mod",
+        "concept_summary": "A documented Minecraft mod.",
+        "primary_entity_url": "https://example.org/product",
+        "concept_evidence_refs": ["ev-1"],
+        "primary_entity_evidence_refs": ["ev-1"],
+    })
+    capture["queries"][0]["purpose"] = "current lifecycle/identity check"
+    capture["queries"][1]["purpose"] = "pain-point discovery"
+    capture["opened_pages"].append({
+        "capture_id": "page-1",
+        "family_id": family_id,
+        "query_ref": "q-1-1",
+        "source_url": "https://example.org/product",
+        "source_title": "Example product",
+        "source_type": "PRIMARY_PRODUCT",
+        "retrieved_at": "2026-09-24T13:00:00Z",
+    })
+    capture["evidence"].append({
+        "capture_id": "ev-1",
+        "family_id": family_id,
+        "page_ref": "page-1",
+        "claim_type": "SEMANTIC_IDENTITY",
+        "observation": "The publisher identifies this page as its Minecraft mod.",
+    })
+    return capture
+
+
+@pytest.mark.parametrize("missing_purpose", research.REQUIRED_RESOLVED_QUERY_PURPOSES)
+def test_resolved_family_requires_each_exact_lifecycle_and_pain_query_purpose(missing_purpose):
+    capture = _resolved_capture_with_required_queries()
+    purpose_query = next(row for row in capture["queries"] if row["purpose"] == missing_purpose)
+    purpose_query["purpose"] = "general research"
+    normalized = research._normalize_capture(capture, _canonical_families())
+    qa = research._validate_payload(normalized, _canonical_families())
+    assert f"RESOLVED family lacks required query purpose {missing_purpose!r}" in "\n".join(qa["errors"])
+
+
+def test_resolved_family_passes_exact_lifecycle_and_pain_query_purpose_gate():
+    capture = _resolved_capture_with_required_queries()
+    normalized = research._normalize_capture(capture, _canonical_families())
+    qa = research._validate_payload(normalized, _canonical_families())
+    assert qa["status"] == "PASS"
+    assert qa["query_purpose_presence_by_rank"]["1"] == {
+        "current lifecycle/identity check": True,
+        "pain-point discovery": True,
+    }
+
+
+def test_query_count_by_rank_reports_executed_attempts():
+    capture = _capture()
+    normalized = research._normalize_capture(capture, _canonical_families())
+    qa = research._validate_payload(normalized, _canonical_families())
+    assert qa["query_count_by_rank"]["2"] == 3
+
+
+def test_dawn_is_current_rank7_competitor_and_feather_is_transition_evidence():
+    capture = _capture()
+    family_id = research.PILOT_FAMILY_IDS[6]
+    pack = capture["families"][6]
+    pack.update({
+        "research_status": "RESOLVED",
+        "resolved_concept_name": "Lunar Client modded Minecraft client/launcher",
+        "concept_summary": "A bundled Minecraft client with integrated mods.",
+        "primary_entity_url": "https://www.lunarclient.com/features",
+        "concept_evidence_refs": ["ev-lunar-id"],
+        "primary_entity_evidence_refs": ["ev-lunar-id"],
+    })
+    queries = {row["capture_id"]: row for row in capture["queries"] if row["family_id"] == family_id}
+    queries["q-7-1"]["purpose"] = "current lifecycle/identity check"
+    queries["q-7-2"]["purpose"] = "pain-point discovery"
+    capture["opened_pages"].extend([
+        {
+            "capture_id": "page-lunar",
+            "family_id": family_id,
+            "query_ref": "q-7-1",
+            "source_url": "https://www.lunarclient.com/features",
+            "source_title": "Lunar Client Features",
+            "source_type": "PRIMARY_PRODUCT",
+            "retrieved_at": "2026-09-24T13:00:00Z",
+        },
+        {
+            "capture_id": "page-feather",
+            "family_id": family_id,
+            "query_ref": "q-7-1",
+            "source_url": "https://feathermc.com/",
+            "source_title": "Feather is now Dawn",
+            "source_type": "PRIMARY_PRODUCT",
+            "retrieved_at": "2026-09-24T13:00:00Z",
+        },
+        {
+            "capture_id": "page-dawn",
+            "family_id": family_id,
+            "query_ref": "q-7-1",
+            "source_url": "https://dawn.gg/",
+            "source_title": "Dawn Minecraft Client",
+            "source_type": "PRIMARY_PRODUCT",
+            "retrieved_at": "2026-09-24T13:00:00Z",
+        },
+    ])
+    capture["evidence"].extend([
+        {
+            "capture_id": "ev-lunar-id",
+            "family_id": family_id,
+            "page_ref": "page-lunar",
+            "claim_type": "SEMANTIC_IDENTITY",
+            "observation": "The official page identifies Lunar Client as a Minecraft client with integrated mods.",
+        },
+        {
+            "capture_id": "ev-feather-migration",
+            "family_id": family_id,
+            "page_ref": "page-feather",
+            "claim_type": "SEMANTIC_IDENTITY",
+            "observation": "The official Feather page says Feather is now Dawn and directs users to Dawn.",
+        },
+        {
+            "capture_id": "ev-dawn-id",
+            "family_id": family_id,
+            "page_ref": "page-dawn",
+            "claim_type": "SEMANTIC_IDENTITY",
+            "observation": "The official site identifies Dawn as a Minecraft client.",
+        },
+        {
+            "capture_id": "ev-dawn-relation",
+            "family_id": family_id,
+            "page_ref": "page-dawn",
+            "claim_type": "COMPETITOR_RELATION",
+            "observation": "The official Dawn and Lunar client descriptions support overlap in bundled modded-client use.",
+        },
+    ])
+    capture["competitors"].append({
+        "capture_id": "cmp-dawn",
+        "family_id": family_id,
+        "entity_name": "Dawn",
+        "canonical_url": "https://dawn.gg/",
+        "relation_type": "DIRECT",
+        "product_type": "Minecraft client/launcher",
+        "platform_or_ecosystem": "Minecraft Java Edition",
+        "evidence_refs": ["ev-lunar-id", "ev-feather-migration", "ev-dawn-id", "ev-dawn-relation"],
+    })
+
+    payload = research._normalize_capture(capture, _canonical_families())
+    qa = research._validate_payload(payload, _canonical_families())
+    rank7_entities = [row for row in payload["competitor_entities"] if row["family_id"] == family_id]
+    dawn = next(row for row in rank7_entities if row["entity_name"] == "Dawn")
+    cited = [row for row in payload["external_evidence"] if row["evidence_id"] in dawn["evidence_ids"]]
+
+    assert qa["status"] == "PASS"
+    assert {row["entity_name"] for row in rank7_entities} == {"Dawn"}
+    assert dawn["canonical_url"] == "https://dawn.gg/"
+    assert any("Feather is now Dawn" in row["observation"] for row in cited)
+
+
 def test_pack_copies_every_yee46_baseline_field_without_recalculation():
     canonical = _canonical_families()
     payload = research._normalize_capture(_capture(), canonical)

@@ -44,6 +44,8 @@ Competitor relations, pricing, features, maintenance, source-native popularity p
 
 Minimum three distinct search queries are required before labeling a family `UNRESOLVED`, unless the capture documents a conclusive disproof. The maximum is ten executed queries and fifteen retained opened pages per family. Coverage labels do not imply market size, ranking, or recommendation.
 
+RESOLVED families must each record an exact-purpose query with purpose equal to “current lifecycle/identity check” and another with purpose equal to “pain-point discovery”. The lifecycle pass checks current identity, rename/acquisition/migration/successor/deprecation/discontinuation signals; the pain-point pass targets user or support surfaces. Both attempts remain in research_queries even when no usable evidence is found. Validator/QA reports presence by resolved rank and executed query counts by rank; search-result snippets alone do not satisfy either evidence requirement.
+
 ## Integrity and reproducibility
 
 SQLite has primary/foreign-key constraints, `PRAGMA integrity_check` and `foreign_key_check` are required to pass, and row counts must reconcile exactly with JSONL/CSV. Production generation also replays the normalized capture in an isolated temporary directory and checks all deterministic data artifact bytes. The manifest inventories artifact byte sizes and SHA-256 values; it excludes itself to avoid recursive hashing.

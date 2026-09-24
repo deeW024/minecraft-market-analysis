@@ -20,8 +20,6 @@ SCHEMA_VERSION = "yee-47-external-market-evidence-v0.1"
 BASELINE_COMMIT = "79ca2f68591a6b469b4bd57bc974584b364fe107"
 ACCEPTED_SHORTLIST_SHA256 = "b9a9b41b054fa761945098054cffb52c1ab42d0779f4cfb1e459be824a119a0f"
 ACCEPTED_ANALYSIS_DB_SHA256 = "770a70d03af05f651cb9e7282a21a6d8961dadaa547d017c3e144bffe4791156"
-SPEC_SHORTLIST_SHA256_LITERAL = "b9a9b41b054fa761945098054cffb52c1ab42d0779f4c6fb1e459be824a119a0f"
-ACCEPTED_YEE46_MANIFEST_URL = "https://drive.google.com/file/d/1_o5obdhL_qvjkt42jNOcFbanDGuSygqB/view"
 PILOT_FAMILY_IDS = (
     "family_188439fdf256290b518101b998fcc1796fec6d84387beed586a81728b8978a4b",
     "family_7dcf5fc1be7927b96992d206c8fc61eba8ebb36a0a360f17cbad589785f0e5c3",
@@ -46,6 +44,7 @@ CLAIM_TYPES = {
 }
 RELATION_TYPES = {"DIRECT", "SUBSTITUTE", "ADJACENT"}
 RESEARCH_STATUSES = {"RESOLVED", "AMBIGUOUS", "UNRESOLVED"}
+REQUIRED_RESOLVED_QUERY_PURPOSES = ("current lifecycle/identity check", "pain-point discovery")
 
 PACK_BASE_COLUMNS = (
     "family_id", "consensus_rank", "canonical_topic_key", "member_topic_keys", "aliases",
@@ -687,8 +686,13 @@ def _validate_payload(
         status = pack["research_status"]
         if status not in RESEARCH_STATUSES:
             errors.append(f"invalid research_status: {family_id}")
-        elif status == "RESOLVED" and (not pack["resolved_concept_name"] or not pack["concept_summary"]):
-            errors.append(f"RESOLVED family lacks resolved concept/summary: {family_id}")
+        elif status == "RESOLVED":
+            if not pack["resolved_concept_name"] or not pack["concept_summary"]:
+                errors.append(f"RESOLVED family lacks resolved concept/summary: {family_id}")
+            observed_purposes = {row["purpose"] for row in family_queries}
+            for purpose in REQUIRED_RESOLVED_QUERY_PURPOSES:
+                if purpose not in observed_purposes:
+                    errors.append(f"RESOLVED family lacks required query purpose {purpose!r}: {family_id}")
         elif status != "RESOLVED" and (pack["resolved_concept_name"] is not None or pack["primary_entity_url"] is not None):
             errors.append(f"non-RESOLVED family is force-mapped to a primary entity: {family_id}")
 
@@ -746,6 +750,17 @@ def _validate_payload(
         "competitor_entities": len(entities),
         "research_queries": len(queries),
     }
+    query_count_by_rank = {
+        str(seed["consensus_rank"]): len(queries_by_family.get(family_id, []))
+        for family_id, seed in seed_by_id.items()
+    }
+    query_purpose_presence_by_rank = {
+        str(pack["consensus_rank"]): {
+            purpose: purpose in {row["purpose"] for row in queries_by_family.get(pack["family_id"], [])}
+            for purpose in REQUIRED_RESOLVED_QUERY_PURPOSES
+        }
+        for pack in families if pack["research_status"] == "RESOLVED"
+    }
     return {
         "status": "PASS" if not errors else "FAIL",
         "errors": errors,
@@ -756,6 +771,12 @@ def _validate_payload(
         "claim_type_counts": dict(sorted(Counter(row["claim_type"] for row in evidence).items())),
         "relation_type_counts": dict(sorted(Counter(row["relation_type"] for row in entities).items())),
         "query_count_by_family": {family_id: len(queries_by_family.get(family_id, [])) for family_id in PILOT_FAMILY_IDS},
+        "query_count_by_rank": query_count_by_rank,
+        "query_purpose_count_by_family": {
+            family_id: dict(sorted(Counter(row["purpose"] for row in queries_by_family.get(family_id, [])).items()))
+            for family_id in PILOT_FAMILY_IDS
+        },
+        "query_purpose_presence_by_rank": query_purpose_presence_by_rank,
         "evidence_count_by_family": {family_id: len(evidence_by_family.get(family_id, [])) for family_id in PILOT_FAMILY_IDS},
     }
 
@@ -881,7 +902,6 @@ def _report(qa: Mapping[str, Any]) -> str:
         f"- Authorized family ranks: {', '.join(str(rank) for rank in range(1, 11))}; no ranks 11..100 were researched.",
         f"- Accepted YEE-46 shortlist SHA-256: `{qa['inputs']['shortlist_sha256']}`.",
         f"- Accepted YEE-46 analysis DB SHA-256: `{qa['inputs']['analysis_db_sha256']}` (read-only).",
-        f"- Shortlist hash reconciliation: {qa['details']['input_hash_reconciliation']['resolution']} Spec literal has {qa['details']['input_hash_reconciliation']['spec_literal_length']} characters (invalid SHA-256 length); accepted manifest records the verified 64-character hash. [YEE-46 manifest]({qa['details']['input_hash_reconciliation']['manifest_url']}).",
         f"- Input SHA/count/identity unchanged: {qa['checks']['canonical_inputs_unchanged']}.",
         "- No re-ranking, new opportunity score, product recommendation, revenue/TAM estimate, YEE-24 API/token work, or auth bypass was performed.",
         "",
@@ -894,6 +914,8 @@ def _report(qa: Mapping[str, Any]) -> str:
         f"- Relation counts: `{_canonical_json(details['relation_type_counts'])}`.",
         f"- Claim-type counts: `{_canonical_json(details['claim_type_counts'])}`.",
         f"- Opened-page counts by rank: `{_canonical_json(details['opened_page_count_by_rank'])}`.",
+        f"- Executed queries by rank: `{_canonical_json(details['query_count_by_rank'])}`.",
+        f"- Required lifecycle/identity and pain-point query purposes by resolved rank: `{_canonical_json(details['query_purpose_presence_by_rank'])}`.",
         "",
         "## Family-level gaps/ambiguity",
         "",
@@ -984,11 +1006,14 @@ def build_pilot(
     counts = {table: len(rows) for table, rows in payload.items()}
     checks = {
         "accepted_input_hashes_match": hashes_before == {"shortlist": ACCEPTED_SHORTLIST_SHA256, "analysis_db": ACCEPTED_ANALYSIS_DB_SHA256},
-        "accepted_shortlist_hash_reconciled_to_y46_manifest": len(SPEC_SHORTLIST_SHA256_LITERAL) != 64 and hashes_before["shortlist"] == ACCEPTED_SHORTLIST_SHA256,
         "canonical_inputs_unchanged": hashes_after == hashes_before,
         "exact_authorized_pilot_family_set": len(payload["family_research_packs"]) == 10 and [row["family_id"] for row in payload["family_research_packs"]] == list(PILOT_FAMILY_IDS),
         "exact_pilot_ranks_1_to_10": [row["consensus_rank"] for row in payload["family_research_packs"]] == list(range(1, 11)),
         "all_pilot_families_have_search_provenance": all(validation["query_count_by_family"].values()),
+        "resolved_families_have_required_research_passes": all(
+            all(validation["query_purpose_presence_by_rank"].get(str(row["consensus_rank"]), {}).values())
+            for row in payload["family_research_packs"] if row["research_status"] == "RESOLVED"
+        ),
         "research_budgets_respected": all(count <= 10 for count in validation["query_count_by_family"].values()) and all(count <= 15 for count in opened_page_count_by_rank.values()),
         "evidence_and_field_references_reconcile": not validation["errors"],
         "no_mixed_currency_or_unsupported_aggregations": not any("mixed-currency" in error for error in validation["errors"]),
@@ -1015,13 +1040,6 @@ def build_pilot(
             "analysis_db_sha256": hashes_before["analysis_db"],
             "sha256_after": hashes_after,
             "baseline_commit": BASELINE_COMMIT,
-            "shortlist_hash_reconciliation": {
-                "spec_literal": SPEC_SHORTLIST_SHA256_LITERAL,
-                "spec_literal_length": len(SPEC_SHORTLIST_SHA256_LITERAL),
-                "verified_local_sha256": hashes_before["shortlist"],
-                "accepted_manifest_url": ACCEPTED_YEE46_MANIFEST_URL,
-                "resolution": "Use the valid 64-character SHA-256 corroborated by the accepted YEE-46 manifest; the Worker Spec literal contains one extra character.",
-            },
         },
         "checks": checks,
         "errors": validation["errors"],
@@ -1033,16 +1051,11 @@ def build_pilot(
             "claim_type_counts": validation["claim_type_counts"],
             "relation_type_counts": validation["relation_type_counts"],
             "query_count_by_family": validation["query_count_by_family"],
+            "query_count_by_rank": validation["query_count_by_rank"],
+            "query_purpose_count_by_family": validation["query_purpose_count_by_family"],
+            "query_purpose_presence_by_rank": validation["query_purpose_presence_by_rank"],
             "opened_page_count_by_rank": opened_page_count_by_rank,
             "evidence_count_by_family": validation["evidence_count_by_family"],
-            "input_hash_reconciliation": {
-                "spec_literal": SPEC_SHORTLIST_SHA256_LITERAL,
-                "spec_literal_length": len(SPEC_SHORTLIST_SHA256_LITERAL),
-                "verified_sha256": hashes_before["shortlist"],
-                "accepted_manifest_sha256": ACCEPTED_SHORTLIST_SHA256,
-                "manifest_url": ACCEPTED_YEE46_MANIFEST_URL,
-                "resolution": "spec literal typo reconciled against accepted YEE-46 manifest",
-            },
             "family_summaries": [
                 {key: row[key] for key in ("consensus_rank", "canonical_topic_key", "research_status", "research_coverage_status", "research_notes")}
                 for row in payload["family_research_packs"]
