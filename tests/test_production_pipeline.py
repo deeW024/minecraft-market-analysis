@@ -297,6 +297,87 @@ def test_coherence_registry_stays_outside_base_pair_table_with_foreign_keys_enab
         assert runner.connection.execute("SELECT count(*) FROM pair_runs WHERE pair_id='coherence-ab'").fetchone()[0] == 1
 
 
+def test_finalization_filters_completed_coherence_resolutions_from_base_map(tmp_path):
+    topics = {
+        "alpha": _topic("alpha", 30),
+        "beta": _topic("beta", 20),
+        "gamma": _topic("gamma", 10),
+    }
+    base_pairs = [_pair("base-ab", "alpha", "beta"), _pair("base-bc", "beta", "gamma")]
+    base_runs = [_completed_run(pair) for pair in base_pairs]
+    base_resolutions = {pair["pair_id"]: _resolution() for pair in base_pairs}
+    coherence_edges = plan_representative_coherence_edges(
+        topics, base_pairs, base_runs, base_resolutions, [], {}
+    )
+    assert len(coherence_edges) == 1
+    assert (coherence_edges[0]["left_topic_key"], coherence_edges[0]["right_topic_key"]) == (
+        "alpha", "gamma"
+    )
+
+    preflight_commit = "acc70a0f544fa4214c0387ff69c5f47cfdc0441a"
+    execution_commit = "f9c23cfc2ba8426d1e214690619b4269713db9c3"
+    run_id = "completed-coherence-finalization-test"
+    questions, question_sha = load_pair_questions()
+    database = tmp_path / "production.sqlite"
+    runner_metadata = {"run_id": run_id, "code_commit": preflight_commit, "inference_parameters": {}}
+    production_metadata = {"run_id": run_id, "code_commit": preflight_commit}
+    all_pairs = [*base_pairs, *coherence_edges]
+
+    with PairAdjudicationRunner(
+        database, _Provider(), questions, question_sha, runner_metadata
+    ) as runner:
+        runner.register_candidate_pairs(base_pairs)
+        runner.register_coherence_edges(coherence_edges)
+        runner.connection.executescript(
+            "CREATE TABLE production_run_metadata(run_id TEXT PRIMARY KEY,metadata_json TEXT NOT NULL);"
+            "CREATE TABLE seed_provenance(cache_key TEXT PRIMARY KEY,source_attempt_count INTEGER NOT NULL);"
+            "CREATE TABLE pair_resolutions(pair_id TEXT PRIMARY KEY,derived_json TEXT NOT NULL);"
+        )
+        runner.connection.execute(
+            "INSERT INTO production_run_metadata VALUES (?,?)",
+            (run_id, canonical_json(production_metadata)),
+        )
+        for pair in all_pairs:
+            request, cache_key = runner._request(pair, build_pair_state(pair, topics), None)
+            runner._ensure_run(pair, request, cache_key, None)
+            normalized = _completed_run(pair)["normalized"]
+            runner.connection.execute(
+                "UPDATE pair_runs SET status='completed',normalized_json=? WHERE cache_key=?",
+                (canonical_json(normalized), cache_key),
+            )
+            runner.connection.execute(
+                "INSERT INTO pair_resolutions VALUES (?,?)",
+                (pair["pair_id"], canonical_json(_resolution())),
+            )
+        runner.connection.commit()
+
+    production_cli._record_execution_provenance(
+        database, run_id, preflight_commit, execution_commit
+    )
+    filtered_base_resolutions = production_cli._resolution_map_for_registry(
+        database, "candidate_pairs"
+    )
+    filtered_edge_resolutions = production_cli._resolution_map_for_registry(
+        database, "coherence_edges"
+    )
+    assert set(filtered_base_resolutions) == {pair["pair_id"] for pair in base_pairs}
+    assert set(filtered_edge_resolutions) == {coherence_edges[0]["pair_id"]}
+
+    result = production_cli._finalize_production_exports(
+        database,
+        tmp_path,
+        topics,
+        base_pairs,
+        {"yee31": "d" * 64, "yee30": "e" * 64},
+        None,
+        execution_commit,
+    )
+
+    assert result["family_qa"]["status"] == "PASS"
+    assert result["family_qa"]["families_finalized"] is True
+    assert result["coherence_edge_count"] == 1
+
+
 def test_representative_coherence_merge_completes_component_without_polluting_base_pairs():
     topics = {
         "alpha": _topic("alpha", 30),

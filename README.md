@@ -85,5 +85,9 @@ JEV_TRANSPORT=typesafe and TYPESAFE_API_KEY:
 The command builds and byte-checks the full candidate-pair file before any
 inference, then runs exactly 120 pilot pairs and 40 pairs with three fresh
 stability replicates. It does not adjudicate the remaining pairs or build
-concept families. Offline artifact recalculation from the persisted SQLite
-attempts uses --finalize-only and makes no Jev/network requests.
+concept families. After a pilot, `--finalize-only` recalculates pilot/stability
+QA and exports from existing SQLite outcomes without inference dispatch. It
+still validates the configured TypeSafe runtime and initializes the pinned
+SDK client, so it requires `JEV_TRANSPORT=typesafe` and `TYPESAFE_API_KEY` and
+is not a credential-free offline mode. Use the same input/output paths and
+persisted run state; production family finalization is a separate workflow.

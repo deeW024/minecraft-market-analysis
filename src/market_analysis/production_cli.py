@@ -404,7 +404,7 @@ def run_authorized_production(args: argparse.Namespace) -> dict[str, Any]:
             for _iteration in range(len(topics_by_key) + 1):
                 base_pairs, base_runs = _registry_snapshot(database, "candidate_pairs")
                 edges, edge_runs = _registry_snapshot(database, "coherence_edges")
-                base_resolutions = _resolution_map(database)
+                base_resolutions = _resolution_map_for_registry(database, "candidate_pairs")
                 edge_resolutions = _resolution_map_for_registry(database, "coherence_edges")
                 additions = plan_representative_coherence_edges(
                     topics_by_key, base_pairs, base_runs, base_resolutions, edges, edge_resolutions
@@ -421,7 +421,7 @@ def run_authorized_production(args: argparse.Namespace) -> dict[str, Any]:
                 if not additions:
                     refreshed_base_pairs, refreshed_base_runs = _registry_snapshot(database, "candidate_pairs")
                     refreshed_edges, refreshed_edge_runs = _registry_snapshot(database, "coherence_edges")
-                    refreshed_base_resolutions = _resolution_map(database)
+                    refreshed_base_resolutions = _resolution_map_for_registry(database, "candidate_pairs")
                     refreshed_edge_resolutions = _resolution_map_for_registry(database, "coherence_edges")
                     more = plan_representative_coherence_edges(
                         topics_by_key, refreshed_base_pairs, refreshed_base_runs,
@@ -466,7 +466,7 @@ def _finalize_production_exports(
 ) -> dict[str, Any]:
     base_pairs, base_runs = _registry_snapshot(database, "candidate_pairs")
     coherence_edges, coherence_runs = _registry_snapshot(database, "coherence_edges")
-    resolutions = _resolution_map(database)
+    base_resolutions = _resolution_map_for_registry(database, "candidate_pairs")
     edge_resolutions = _resolution_map_for_registry(database, "coherence_edges")
     production_meta_connection = sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)
     production_meta_connection.row_factory = sqlite3.Row
@@ -520,7 +520,7 @@ def _finalize_production_exports(
         "network_requests": raw_attempt_count - seed_attempt_count,
     }
     artifacts = build_family_artifacts(
-        topics_by_key, base_pairs, base_runs, resolutions, coherence_edges, coherence_runs,
+        topics_by_key, base_pairs, base_runs, base_resolutions, coherence_edges, coherence_runs,
         edge_resolutions, provenance,
     )
     artifacts["metadata"] = family_metadata
@@ -682,7 +682,7 @@ def run_offline_preflight(args: argparse.Namespace) -> dict[str, Any]:
     )
     base_pairs, base_runs = _registry_snapshot(database, "candidate_pairs")
     edges, edge_runs = _registry_snapshot(database, "coherence_edges")
-    base_resolutions = _resolution_map(database)
+    base_resolutions = _resolution_map_for_registry(database, "candidate_pairs")
     edge_resolutions: dict[str, dict[str, Any]] = {}
     family_metadata = {
         "run_id": seed_summary["run_id"],
