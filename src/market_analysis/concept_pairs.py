@@ -7,6 +7,7 @@ import hashlib
 import itertools
 import json
 import math
+import re
 import sqlite3
 import time
 import unicodedata
@@ -43,6 +44,7 @@ PAIR_STATE_VERSION = "yee-37-pair-state-v0.2"
 PAIR_POLICY_VERSION = "yee-37-pair-policy-v0.2"
 PAIR_QUESTION_SET_VERSION = "yee-37-native-pair-questions-v0.2"
 PAIR_OUTPUT_VERSION = "yee-37-pair-outcomes-v0.2"
+RESOLUTION_POLICY_VERSION = "yee-37-resolution-policy-v0.3"
 PAIR_STATE_MAX_BYTES = 16 * 1024
 PAIR_MAX_EXAMPLES_PER_TOPIC = 8
 EXPECTED_MODEL_ALIAS = "jev-latest"
@@ -623,6 +625,82 @@ def pair_policy(answers: Mapping[str, Any]) -> str:
     raise AssertionError("validated pair disposition was not handled")
 
 
+_RESOLUTION_TOKEN_RE = re.compile(
+    r"v?\d+(?:\.\d+)*|mk\d+|[^\W\d_]+|\d+",
+    flags=re.UNICODE,
+)
+_VERSION_NUMBER_RE = re.compile(r"v?\d+(?:\.\d+)*", flags=re.IGNORECASE)
+_ROMAN_VERSION_TOKENS = frozenset({"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"})
+_RESOLUTION_APOSTROPHE_TRANSLATION = str.maketrans({
+    "’": "'", "‘": "'", "‛": "'", "ʼ": "'", "ʻ": "'", "′": "'",
+    "´": "'", "`": "'", "＇": "'",
+})
+RETRYABLE_JEV_HTTP_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504, 529})
+
+
+def _resolution_tokens(value: str) -> tuple[str, ...]:
+    text = unicodedata.normalize(
+        "NFKC", str(value).translate(_RESOLUTION_APOSTROPHE_TRANSLATION)
+    ).casefold()
+    text = text.translate(_RESOLUTION_APOSTROPHE_TRANSLATION)
+    text = re.sub(r"(?<=\w)'s(?=$|[\W_])", "", text, flags=re.UNICODE)
+    return tuple(_RESOLUTION_TOKEN_RE.findall(text))
+
+
+def _is_explicit_version_qualifier(tokens: tuple[str, ...]) -> bool:
+    if len(tokens) == 1:
+        token = tokens[0]
+        return (
+            token in _ROMAN_VERSION_TOKENS
+            or bool(_VERSION_NUMBER_RE.fullmatch(token))
+            or bool(re.fullmatch(r"mk\d+", token))
+        )
+    return len(tokens) == 2 and tokens[0] == "mk" and tokens[1].isdigit()
+
+
+def has_version_qualifier_pair(left_topic_key: str, right_topic_key: str) -> bool:
+    """Return true only when one normalized label adds one explicit trailing version."""
+    left = _resolution_tokens(left_topic_key)
+    right = _resolution_tokens(right_topic_key)
+    shorter, longer = (left, right) if len(left) < len(right) else (right, left)
+    if len(longer) <= len(shorter) or longer[:len(shorter)] != shorter:
+        return False
+    return _is_explicit_version_qualifier(longer[len(shorter):])
+
+
+def apply_resolution_policy_v03(
+    pair: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+) -> dict[str, str]:
+    """Add deterministic resolution provenance without rewriting Jev v0.2 evidence."""
+    jev_decision = normalized["policy_decision"]
+    if jev_decision not in {"MERGE", "KEEP_SEPARATE", "REVIEW"}:
+        raise TriageValidationError(f"unsupported Jev v0.2 policy decision: {jev_decision}")
+    if has_version_qualifier_pair(
+        str(pair["left_topic_key"]), str(pair["right_topic_key"])
+    ):
+        decision, source = "KEEP_SEPARATE", "VERSION_QUALIFIER"
+    elif "separator_insensitive_alphanumeric_equality" in pair.get("blocking_reasons", []):
+        decision, source = "MERGE", "EXACT_FORM_ALIAS"
+    else:
+        decision, source = jev_decision, "JEV_V02"
+    return {
+        "jev_policy_decision_v02": jev_decision,
+        "resolution_decision": decision,
+        "resolution_source": source,
+        "resolution_policy_version": RESOLUTION_POLICY_VERSION,
+    }
+
+
+def is_retryable_jev_transport_error(error: Exception) -> bool:
+    """Strict retry allowlist for JevTransportError failures only."""
+    if not isinstance(error, JevTransportError):
+        return False
+    if error.status_code is None:
+        return error.connection_timeout_failure
+    return error.status_code in RETRYABLE_JEV_HTTP_STATUS_CODES
+
+
 def _is_terminal_max_tokens_error(error: Exception) -> bool:
     if not isinstance(error, JevTransportError) or error.status_code != 400:
         return False
@@ -1102,8 +1180,9 @@ class PairAdjudicationRunner:
             raise ModelVersionMismatchError(self.provider.model_version, "previously mismatched model")
 
         terminal = self.connection.execute(
-            "SELECT attempt_no FROM pair_attempts WHERE cache_key=? "
-            "AND stage='terminal_max_tokens_exceeded' ORDER BY attempt_no LIMIT 1",
+            "SELECT attempt_no,stage FROM pair_attempts WHERE cache_key=? "
+            "AND stage IN ('terminal_max_tokens_exceeded','terminal_nonretryable_error','parse_error') "
+            "ORDER BY attempt_no LIMIT 1",
             (cache_key,),
         ).fetchone()
         if terminal is not None:
@@ -1133,6 +1212,17 @@ class PairAdjudicationRunner:
                     "status": "completed",
                     "normalized": normalized,
                 }
+            failed = self.connection.execute(
+                "SELECT last_error FROM pair_runs WHERE cache_key=?", (cache_key,)
+            ).fetchone()
+            return {
+                "pair_id": pair["pair_id"],
+                "cache_key": cache_key,
+                "replicate_id": replicate_id,
+                "status": "failed",
+                "normalized": None,
+                "error": failed["last_error"] if failed else "saved response failed contract validation",
+            }
 
         attempts = self.connection.execute(
             "SELECT COALESCE(MAX(attempt_no),0) FROM pair_attempts WHERE cache_key=?",
@@ -1181,21 +1271,22 @@ class PairAdjudicationRunner:
             except Exception as exc:
                 message = str(exc) if isinstance(exc, JevTransportError) else "provider call failed"
                 terminal_max_tokens = _is_terminal_max_tokens_error(exc)
+                retryable = is_retryable_jev_transport_error(exc)
+                stage = (
+                    "terminal_max_tokens_exceeded" if terminal_max_tokens
+                    else "retryable_transport_error" if retryable
+                    else "terminal_nonretryable_error"
+                )
                 self.connection.execute(
                     "UPDATE pair_attempts SET stage=?,error=? WHERE cache_key=? AND attempt_no=?",
-                    (
-                        "terminal_max_tokens_exceeded" if terminal_max_tokens else "provider_error",
-                        message,
-                        cache_key,
-                        attempts,
-                    ),
+                    (stage, message, cache_key, attempts),
                 )
                 self.connection.execute(
                     "UPDATE pair_runs SET status='failed',last_error=? WHERE cache_key=?",
                     (message, cache_key),
                 )
                 self.connection.commit()
-                if terminal_max_tokens:
+                if not retryable:
                     break
                 if attempts < self.max_attempts:
                     time.sleep(self.retry_delays[min(attempts - 1, len(self.retry_delays) - 1)] if self.retry_delays else 0)
@@ -1226,8 +1317,7 @@ class PairAdjudicationRunner:
                     "status": "completed",
                     "normalized": normalized,
                 }
-            if attempts < self.max_attempts:
-                time.sleep(self.retry_delays[min(attempts - 1, len(self.retry_delays) - 1)] if self.retry_delays else 0)
+            break
 
         final = self.connection.execute(
             "SELECT last_error FROM pair_runs WHERE cache_key=?", (cache_key,)

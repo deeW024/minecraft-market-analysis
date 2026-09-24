@@ -8,6 +8,8 @@ from market_analysis.concept_pairs_cli import (
     _acceptance_gate_status,
     _assert_terminal_outcomes,
     _reuse_persisted_run_metadata,
+    _v03_outcome,
+    _v03_sentinel_results,
 )
 from market_analysis.concept_pairs import (
     EXPECTED_MODEL_ALIAS,
@@ -15,11 +17,15 @@ from market_analysis.concept_pairs import (
     PAIR_MAX_EXAMPLES_PER_TOPIC,
     PAIR_STATE_MAX_BYTES,
     PAIR_STATE_VERSION,
+    RESOLUTION_POLICY_VERSION,
     PairAdjudicationRunner,
+    apply_resolution_policy_v03,
     build_pair_state,
     build_stability_report,
     deterministic_manual_audit_sample,
     generate_candidate_pairs,
+    has_version_qualifier_pair,
+    is_retryable_jev_transport_error,
     load_pair_questions,
     normalize_pair_response,
     pair_policy,
@@ -591,7 +597,244 @@ def test_model_version_mismatch_saves_raw_and_aborts_without_retry_or_next_pair(
     assert bytes(saved["raw_response"]) == canonical_json(mismatch).encode()
 
 
-def test_bounded_parse_retry_uses_first_contract_valid_response(tmp_path):
+def test_resolution_policy_v03_exact_form_alias_overrides_jev_and_preserves_diagnostics():
+    pair = _pair_record(
+        "name tag",
+        "nametag",
+        reasons=["separator_insensitive_alphanumeric_equality"],
+    )
+    normalized = {
+        "policy_decision": "KEEP_SEPARATE",
+        "concept_relation": {"choice": "SAME_CONCEPT"},
+    }
+
+    result = apply_resolution_policy_v03(pair, normalized)
+
+    assert result == {
+        "jev_policy_decision_v02": "KEEP_SEPARATE",
+        "resolution_decision": "MERGE",
+        "resolution_source": "EXACT_FORM_ALIAS",
+        "resolution_policy_version": RESOLUTION_POLICY_VERSION,
+    }
+    assert normalized["policy_decision"] == "KEEP_SEPARATE"
+
+
+@pytest.mark.parametrize(
+    ("base", "qualified"),
+    [
+        ("prominence", "prominence II"),
+        ("project", "project 3"),
+        ("plugin", "plugin 1.2.3"),
+        ("plugin", "plugin v2.0"),
+        ("plugin", "plugin mk3"),
+        ("plugin", "plugin mk 3"),
+        ("resource", "resource X"),
+        ("Farmer's", "Farmer’s II"),
+    ],
+)
+def test_resolution_policy_v03_version_qualifier_precedes_exact_alias(base, qualified):
+    pair = _pair_record(
+        base,
+        qualified,
+        reasons=["separator_insensitive_alphanumeric_equality"],
+    )
+    normalized = {"policy_decision": "MERGE"}
+
+    assert has_version_qualifier_pair(base, qualified)
+    result = apply_resolution_policy_v03(pair, normalized)
+    assert result["jev_policy_decision_v02"] == "MERGE"
+    assert result["resolution_decision"] == "KEEP_SEPARATE"
+    assert result["resolution_source"] == "VERSION_QUALIFIER"
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("prominence", "prominence xi"),
+        ("project", "project 2 beta"),
+        ("plugin", "plugin mk beta"),
+        ("plugin", "plugin v.2"),
+    ],
+)
+def test_version_qualifier_guard_requires_one_explicit_trailing_qualifier(left, right):
+    assert not has_version_qualifier_pair(left, right)
+
+
+def test_resolution_policy_v03_falls_back_to_jev_without_fuzzy_merge():
+    pair = _pair_record("alpha plugin", "alpha plugins")
+    normalized = {"policy_decision": "REVIEW"}
+
+    result = apply_resolution_policy_v03(pair, normalized)
+
+    assert result["jev_policy_decision_v02"] == "REVIEW"
+    assert result["resolution_decision"] == "REVIEW"
+    assert result["resolution_source"] == "JEV_V02"
+
+
+def test_v03_replay_adds_resolution_without_mutating_saved_typed_outcome():
+    pair = _pair_record(
+        "name tag",
+        "nametag",
+        reasons=["separator_insensitive_alphanumeric_equality"],
+    )
+    normalized = {
+        "policy_decision": "KEEP_SEPARATE",
+        "concept_relation": {"choice": "SAME_CONCEPT", "confidence": 0.51},
+        "returned_model": EXPECTED_MODEL_VERSION,
+        "response_sha256": "e" * 64,
+    }
+    source = {
+        **pair,
+        "status": "completed",
+        "replicate_id": "stability-1",
+        "normalized": normalized,
+    }
+    before = canonical_json(source)
+
+    first = _v03_outcome(source)
+    second = _v03_outcome(source)
+
+    assert canonical_json(source) == before
+    assert first == second
+    assert first["normalized"] == normalized
+    assert first["jev_policy_decision_v02"] == "KEEP_SEPARATE"
+    assert first["resolution_decision"] == "MERGE"
+    assert first["resolution_source"] == "EXACT_FORM_ALIAS"
+
+
+def test_announce_announcer_is_reclassified_as_diagnostic_without_rewriting_v02():
+    pair = _pair_record(
+        "announce",
+        "announcer",
+        sentinel={"sentinel_id": "announce / announcer", "expected_policy": "NOT_MERGE"},
+    )
+    outcome = {
+        "pair_id": pair["pair_id"],
+        "resolution_decision": "MERGE",
+        "jev_policy_decision_v02": "MERGE",
+    }
+
+    result = _v03_sentinel_results([pair], [outcome])
+
+    assert pair["sentinel_expectations"][0]["expected_policy"] == "NOT_MERGE"
+    assert result == [{
+        "pair_id": pair["pair_id"],
+        "sentinel_id": "announce / announcer",
+        "v03_qa_role": "DIAGNOSTIC_ONLY",
+        "historical_v02_expected_policy": "NOT_MERGE",
+        "resolution_decisions": ["MERGE"],
+        "hard_gate": False,
+    }]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (JevTransportError("connection timeout", connection_timeout_failure=True), True),
+        *[
+            (JevTransportError("transient HTTP", status_code=status), True)
+            for status in (408, 425, 429, 500, 502, 503, 504, 529)
+        ],
+        *[
+            (JevTransportError("permanent HTTP", status_code=status), False)
+            for status in (400, 401, 403, 404, 422)
+        ],
+        (JevTransportError("unclassified transport failure"), False),
+        (JevTransportError("evidence persistence failed"), False),
+        (TriageValidationError("parse contract failure"), False),
+        (RuntimeError("arbitrary exception"), False),
+    ],
+)
+def test_retry_classifier_is_explicitly_allowlisted(error, expected):
+    assert is_retryable_jev_transport_error(error) is expected
+
+
+def test_allowlisted_transient_http_failure_gets_one_bounded_retry(tmp_path):
+    pair = _pair_record("alpha", "beta")
+
+    class RetryThenSuccessReasoner(FixtureReasoner):
+        def complete(self, request, capture=None):
+            self.requests.append(request)
+            if capture is not None:
+                capture.before_dispatch(request.body)
+            if len(self.requests) == 1:
+                raw = b'{"error":"temporary"}'
+                if capture is not None:
+                    capture.before_parse(529, raw, "fixture-transient")
+                raise JevTransportError(
+                    "temporary provider failure",
+                    status_code=529,
+                    request_id="fixture-transient",
+                    error_body=raw.decode(),
+                )
+            response = self.responses.pop(0)
+            raw = canonical_json(response).encode()
+            if capture is not None:
+                capture.before_parse(200, raw, f"fixture-{len(self.requests)}")
+            return ProviderResponse(raw, f"fixture-{len(self.requests)}")
+
+    reasoner = RetryThenSuccessReasoner([_native_response("RELATED_DISTINCT")])
+    runner = _runner(tmp_path / "transient_retry.db", reasoner, max_attempts=2)
+    runner.register_candidate_pairs([pair])
+    state = {
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_id": pair["pair_id"],
+        "left": {"topic_key": "alpha"},
+        "right": {"topic_key": "beta"},
+    }
+    try:
+        result = runner.run_pair(pair, state)
+        attempts = runner.raw_attempts()
+    finally:
+        runner.close()
+
+    assert result["status"] == "completed"
+    assert result["normalized"]["policy_decision"] == "KEEP_SEPARATE"
+    assert [row["stage"] for row in attempts] == ["retryable_transport_error", "completed"]
+    assert len(reasoner.requests) == 2
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        JevTransportError("permanent HTTP failure", status_code=403),
+        RuntimeError("arbitrary provider exception"),
+    ],
+)
+def test_nonallowlisted_provider_failure_is_terminal_and_resume_safe(tmp_path, failure):
+    pair = _pair_record("alpha", "beta")
+
+    class FailingReasoner(FixtureReasoner):
+        def complete(self, request, capture=None):
+            self.requests.append(request)
+            if capture is not None:
+                capture.before_dispatch(request.body)
+                if isinstance(failure, JevTransportError):
+                    capture.before_parse(403, b'{"error":"forbidden"}', "fixture-forbidden")
+            raise failure
+
+    reasoner = FailingReasoner([])
+    runner = _runner(tmp_path / "terminal_failure.db", reasoner, max_attempts=3)
+    runner.register_candidate_pairs([pair])
+    state = {
+        "pair_state_version": PAIR_STATE_VERSION,
+        "pair_id": pair["pair_id"],
+        "left": {"topic_key": "alpha"},
+        "right": {"topic_key": "beta"},
+    }
+    try:
+        first = runner.run_pair(pair, state)
+        resumed = runner.run_pair(pair, state)
+        attempts = runner.raw_attempts()
+    finally:
+        runner.close()
+
+    assert first["status"] == resumed["status"] == "failed"
+    assert [row["stage"] for row in attempts] == ["terminal_nonretryable_error"]
+    assert len(reasoner.requests) == 1
+
+
+def test_parse_contract_failure_is_terminal_and_resume_safe(tmp_path):
     pair = _pair_record("alpha", "beta")
     invalid = {"model": EXPECTED_MODEL_VERSION, "answers": {}}
     reasoner = FixtureReasoner([invalid, _native_response("RELATED_DISTINCT", 0.9)])
@@ -600,13 +843,13 @@ def test_bounded_parse_retry_uses_first_contract_valid_response(tmp_path):
     state = {"pair_state_version": PAIR_STATE_VERSION, "pair_id": pair["pair_id"], "left": {"topic_key": "alpha"}, "right": {"topic_key": "beta"}}
     try:
         result = runner.run_pair(pair, state)
+        resumed = runner.run_pair(pair, state)
         attempts = runner.raw_attempts()
     finally:
         runner.close()
-    assert result["status"] == "completed"
-    assert result["normalized"]["policy_decision"] == "KEEP_SEPARATE"
-    assert [row["stage"] for row in attempts] == ["parse_error", "completed"]
-    assert len(reasoner.requests) == 2
+    assert result["status"] == resumed["status"] == "failed"
+    assert [row["stage"] for row in attempts] == ["parse_error"]
+    assert len(reasoner.requests) == 1
 
 
 def test_http_400_max_tokens_exceeded_is_terminal_raw_preserved_and_idempotent(tmp_path):

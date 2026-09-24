@@ -8,7 +8,7 @@ import gzip
 import json
 import os
 import subprocess
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -24,12 +24,14 @@ from .concept_pairs import (
     PAIR_STATE_MAX_BYTES,
     PAIR_STATE_VERSION,
     PILOT_SIZE,
+    RESOLUTION_POLICY_VERSION,
     STABILITY_REPETITIONS,
     STABILITY_SIZE,
     YEE30_ACCEPTED_DB_SHA256,
     YEE31_ACCEPTED_INPUT_SHA256,
     YEE31_RUN_ID,
     PairAdjudicationRunner,
+    apply_resolution_policy_v03,
     build_pair_state,
     build_pilot_report,
     build_stability_report,
@@ -46,6 +48,11 @@ from .jev_triage import (
     sha256_bytes,
     sha256_file,
 )
+
+V02_ACCEPTED_RUN_ID = "3471b3fe8ece9cb122b336c9a700a7a3a393953fb719dbe47e8b999fb4cc65ee"
+V02_ACCEPTED_CODE_COMMIT = "9bd3a09062d49eafc78a154bc389d6ae732d4b0a"
+V02_CANDIDATE_UNIVERSE_SHA256 = "c9701db8fc7d75b7d96cb70126344093ca839574ade8773bd29d1898444f23db"
+V01_MANUAL_LABELS_SHA256 = "a4d563e402506d49e57e4d18c2c227e9f10cab8857016616ac357a77d87e0996"
 
 
 def _jsonl_bytes(rows: list[Mapping[str, Any]]) -> bytes:
@@ -479,6 +486,584 @@ def _directory_hashes(directory: Path) -> list[dict[str, Any]]:
     ]
 
 
+def _required_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        raise RuntimeError(f"offline v0.3 replay is missing required evidence: {path.name}")
+    return _read_jsonl(path)
+
+
+def _v03_outcome(row: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = row.get("normalized")
+    if not isinstance(normalized, Mapping):
+        raise RuntimeError(f"offline v0.3 replay found an outcome without normalized Jev evidence: {row.get('pair_id')}")
+    derived = dict(row)
+    derived.update(apply_resolution_policy_v03(row, normalized))
+    return derived
+
+
+def _decision_counts(rows: list[Mapping[str, Any]], field: str) -> dict[str, int]:
+    return dict(sorted(Counter(str(row[field]) for row in rows).items()))
+
+
+def _v03_sentinel_results(
+    selected_pairs: list[Mapping[str, Any]],
+    outcomes: list[Mapping[str, Any]],
+    *,
+    enforce_expectation: bool = True,
+) -> list[dict[str, Any]]:
+    by_id: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in outcomes:
+        by_id[str(row["pair_id"])].append(row)
+    results = []
+    for pair in selected_pairs:
+        for expectation in pair.get("sentinel_expectations", []):
+            sentinel_id = str(expectation["sentinel_id"])
+            observed = [
+                str(row.get("resolution_decision"))
+                for row in by_id.get(str(pair["pair_id"]), [])
+            ]
+            if sentinel_id.casefold() == "announce / announcer":
+                results.append({
+                    "pair_id": pair["pair_id"],
+                    "sentinel_id": sentinel_id,
+                    "v03_qa_role": "DIAGNOSTIC_ONLY",
+                    "historical_v02_expected_policy": expectation["expected_policy"],
+                    "resolution_decisions": observed,
+                    "hard_gate": False,
+                })
+                continue
+            expected = expectation["expected_policy"]
+            if not enforce_expectation:
+                results.append({
+                    "pair_id": pair["pair_id"],
+                    "sentinel_id": sentinel_id,
+                    "pilot_expected_policy": expected,
+                    "resolution_decisions": observed,
+                    "hard_gate": True,
+                    "acceptance_scope": "stability_replicate_diagnostics",
+                    "replicates_agree": bool(observed) and len(set(observed)) == 1,
+                })
+                continue
+            passed = bool(observed) and (
+                all(decision == "MERGE" for decision in observed)
+                if expected == "MERGE"
+                else all(decision in {"KEEP_SEPARATE", "REVIEW"} for decision in observed)
+            )
+            results.append({
+                "pair_id": pair["pair_id"],
+                "sentinel_id": sentinel_id,
+                "expected_policy": expected,
+                "resolution_decisions": observed,
+                "hard_gate": True,
+                "pass": passed,
+            })
+    return results
+
+
+def _write_resolution_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
+    fields = [
+        "pair_id", "left_topic_key", "right_topic_key", "replicate_id", "status",
+        "attempt_count", "jev_policy_decision_v02", "resolution_decision",
+        "resolution_source", "resolution_policy_version", "returned_model",
+        "concept_relation", "merge_disposition", "cache_key",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            normalized = row.get("normalized") or {}
+            item = {key: row.get(key) for key in fields}
+            item["returned_model"] = normalized.get("returned_model")
+            item["concept_relation"] = (normalized.get("concept_relation") or {}).get("choice")
+            item["merge_disposition"] = (normalized.get("merge_disposition") or {}).get("choice")
+            item["cache_key"] = normalized.get("cache_key")
+            writer.writerow(item)
+    temporary.replace(path)
+
+
+def _offline_v03_replay(
+    output_dir: Path,
+    v02_evidence_dir: Path,
+    v01_evidence_dir: Path,
+    advance_path: Path,
+    retrieval_db: Path,
+    code_commit: str,
+) -> dict[str, Any]:
+    required = (
+        "MANIFEST.json",
+        "RUN_METADATA.json",
+        "CANDIDATE_PAIRS.jsonl",
+        "PILOT_SELECTION.jsonl",
+        "STABILITY_SELECTION.jsonl",
+        "PILOT_OUTCOMES.jsonl",
+        "STABILITY_OUTCOMES.jsonl",
+        "STABILITY_QA.json",
+        "RAW_REQUEST_RESPONSE_EVIDENCE.jsonl.gz",
+        "YEE37_PAIR_PILOT.sqlite",
+    )
+    if not v02_evidence_dir.is_dir() or not v01_evidence_dir.is_dir():
+        raise RuntimeError("offline v0.3 replay requires existing v0.2 and v0.1 evidence directories")
+    missing = [name for name in required if not (v02_evidence_dir / name).is_file()]
+    if missing:
+        raise RuntimeError(f"offline v0.3 replay is missing v0.2 evidence files: {', '.join(missing)}")
+
+    v02_before = _directory_hashes(v02_evidence_dir)
+    v01_before = _directory_hashes(v01_evidence_dir)
+    v02_hashes = {item["path"]: item for item in v02_before}
+    v02_manifest = json.loads((v02_evidence_dir / "MANIFEST.json").read_text(encoding="utf-8"))
+    for declared in v02_manifest.get("artifact_files", []):
+        actual = v02_hashes.get(str(declared.get("path")))
+        if actual is None or any(
+            actual.get(key) != declared.get(key) for key in ("bytes", "sha256")
+        ):
+            raise RuntimeError(f"v0.2 evidence does not match its manifest: {declared.get('path')}")
+
+    advance_before = sha256_file(advance_path).lower()
+    y30_before = sha256_file(retrieval_db).lower()
+    if advance_before != YEE31_ACCEPTED_INPUT_SHA256 or y30_before != YEE30_ACCEPTED_DB_SHA256:
+        raise RuntimeError("offline v0.3 replay inputs differ from the accepted YEE-31/YEE-30 hashes")
+
+    run_metadata = json.loads((v02_evidence_dir / "RUN_METADATA.json").read_text(encoding="utf-8"))
+    if (
+        run_metadata.get("run_id") != V02_ACCEPTED_RUN_ID
+        or run_metadata.get("code_commit") != V02_ACCEPTED_CODE_COMMIT
+        or run_metadata.get("requested_model_alias") != EXPECTED_MODEL_ALIAS
+        or run_metadata.get("pair_state_version") != PAIR_STATE_VERSION
+        or run_metadata.get("pair_question_set_version") != PAIR_QUESTION_SET_VERSION
+        or run_metadata.get("pair_policy_version") != PAIR_POLICY_VERSION
+        or run_metadata.get("pair_output_version") != PAIR_OUTPUT_VERSION
+        or run_metadata.get("expected_model_version") != EXPECTED_MODEL_VERSION
+        or run_metadata.get("question_set_sha256") != "643e66605bf93c88875258b766e70364dd3b9fdda7d96ff85e813609e1c3a8af"
+        or run_metadata.get("transport_id") != "typesafe-systemone-http-v1"
+    ):
+        raise RuntimeError("v0.2 run metadata does not match the accepted inference contract")
+
+    candidate_pairs = _required_jsonl(v02_evidence_dir / "CANDIDATE_PAIRS.jsonl")
+    pilot_pairs = _required_jsonl(v02_evidence_dir / "PILOT_SELECTION.jsonl")
+    stability_pairs = _required_jsonl(v02_evidence_dir / "STABILITY_SELECTION.jsonl")
+    pilot_source = _required_jsonl(v02_evidence_dir / "PILOT_OUTCOMES.jsonl")
+    stability_source = _required_jsonl(v02_evidence_dir / "STABILITY_OUTCOMES.jsonl")
+    if len(candidate_pairs) != 1_190 or len({str(row["pair_id"]) for row in candidate_pairs}) != 1_190:
+        raise RuntimeError("v0.2 candidate universe must remain exactly 1,190 unique pairs")
+    if sha256_file(v02_evidence_dir / "CANDIDATE_PAIRS.jsonl").lower() != V02_CANDIDATE_UNIVERSE_SHA256:
+        raise RuntimeError("v0.2 candidate universe differs from its accepted SHA-256")
+    if len(pilot_pairs) != PILOT_SIZE or len(stability_pairs) != STABILITY_SIZE:
+        raise RuntimeError("v0.2 pilot/stability selection counts differ from the accepted identities")
+    pilot_ids = [str(row["pair_id"]) for row in pilot_pairs]
+    stability_ids = [str(row["pair_id"]) for row in stability_pairs]
+    v01_hashes = {item["path"]: item["sha256"] for item in v01_before}
+    selection_names = ("CANDIDATE_PAIRS.jsonl", "PILOT_SELECTION.jsonl", "STABILITY_SELECTION.jsonl")
+    for name in selection_names:
+        if v01_hashes.get(name) != v02_hashes.get(name, {}).get("sha256"):
+            raise RuntimeError(f"v0.2 candidate universe/selection differs from immutable v0.1: {name}")
+    if len(set(pilot_ids)) != PILOT_SIZE or len(set(stability_ids)) != STABILITY_SIZE:
+        raise RuntimeError("v0.2 pilot/stability selections contain duplicate identities")
+    if not set(pilot_ids + stability_ids).issubset({str(row["pair_id"]) for row in candidate_pairs}):
+        raise RuntimeError("v0.2 pilot/stability selections are outside the accepted pair universe")
+    if Counter(str(row["pair_id"]) for row in pilot_source) != Counter(pilot_ids):
+        raise RuntimeError("v0.2 pilot outcomes do not reconcile to the exact 120 selected identities")
+    stability_counts = Counter(str(row["pair_id"]) for row in stability_source)
+    if len(stability_source) != STABILITY_SIZE * STABILITY_REPETITIONS or any(
+        stability_counts[pair_id] != STABILITY_REPETITIONS for pair_id in stability_ids
+    ) or set(stability_counts) != set(stability_ids):
+        raise RuntimeError("v0.2 stability outcomes do not reconcile to the exact 40 × 3 identities")
+    if any(
+        row.get("status") != "completed"
+        or not (row.get("normalized") or {}).get("typed_answers")
+        or (row.get("normalized") or {}).get("returned_model") != EXPECTED_MODEL_VERSION
+        for row in pilot_source + stability_source
+    ):
+        raise RuntimeError("v0.2 outcomes contain incomplete typed evidence or a non-pinned model identity")
+
+    raw_evidence_path = v02_evidence_dir / "RAW_REQUEST_RESPONSE_EVIDENCE.jsonl.gz"
+    with gzip.open(raw_evidence_path, "rt", encoding="utf-8") as evidence_file:
+        raw_evidence_count = sum(1 for line in evidence_file if line.strip())
+    if raw_evidence_count != PILOT_SIZE + STABILITY_SIZE * STABILITY_REPETITIONS:
+        raise RuntimeError("v0.2 raw request/response evidence count does not reconcile to 240 attempts")
+
+    pilot_outcomes = [_v03_outcome(row) for row in pilot_source]
+    stability_outcomes = [_v03_outcome(row) for row in stability_source]
+    if any(
+        canonical_json(source.get("normalized")) != canonical_json(derived.get("normalized"))
+        or derived["jev_policy_decision_v02"] != source["normalized"]["policy_decision"]
+        for source, derived in zip(pilot_source + stability_source, pilot_outcomes + stability_outcomes)
+    ):
+        raise RuntimeError("v0.3 replay altered existing v0.2 typed/model evidence")
+
+    pilot_by_id = {str(row["pair_id"]): row for row in pilot_outcomes}
+    stability_by_id: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in stability_outcomes:
+        stability_by_id[str(row["pair_id"])].append(row)
+    pilot_sentinels = _v03_sentinel_results(pilot_pairs, pilot_outcomes)
+    stability_sentinels = _v03_sentinel_results(
+        stability_pairs,
+        stability_outcomes,
+        enforce_expectation=False,
+    )
+    pilot_hard_sentinels = [row for row in pilot_sentinels if row["hard_gate"]]
+    stability_hard_sentinels = [row for row in stability_sentinels if row["hard_gate"]]
+    pilot_merge_sentinels = [row for row in pilot_hard_sentinels if row["expected_policy"] == "MERGE"]
+    pilot_nonmerge_sentinels = [row for row in pilot_hard_sentinels if row["expected_policy"] == "NOT_MERGE"]
+    stability_rows = []
+    resolution_transition_patterns: Counter[str] = Counter()
+    native_policy_transition_patterns: Counter[str] = Counter()
+    stable_count = 0
+    native_stable_count = 0
+    for pair in stability_pairs:
+        pair_rows = sorted(stability_by_id[str(pair["pair_id"])], key=lambda row: str(row["replicate_id"]))
+        decisions = [str(row["resolution_decision"]) for row in pair_rows]
+        native_decisions = [str(row["jev_policy_decision_v02"]) for row in pair_rows]
+        stable_count += len(decisions) == STABILITY_REPETITIONS and len(set(decisions)) == 1
+        native_stable_count += len(native_decisions) == STABILITY_REPETITIONS and len(set(native_decisions)) == 1
+        for first, second in zip(decisions, decisions[1:]):
+            resolution_transition_patterns[f"{first}->{second}"] += 1
+        for first, second in zip(native_decisions, native_decisions[1:]):
+            native_policy_transition_patterns[f"{first}->{second}"] += 1
+        stability_rows.append({
+            "pair_id": pair["pair_id"],
+            "replicate_count": len(pair_rows),
+            "resolution_decisions": decisions,
+            "resolution_sources": [str(row["resolution_source"]) for row in pair_rows],
+            "jev_policy_decisions_v02": native_decisions,
+            "resolution_exact_agreement": len(decisions) == STABILITY_REPETITIONS and len(set(decisions)) == 1,
+            "jev_policy_v02_exact_agreement_diagnostic": len(native_decisions) == STABILITY_REPETITIONS and len(set(native_decisions)) == 1,
+        })
+
+    sentinel_merge_flips = []
+    hard_sentinel_by_id = {
+        str(pair["pair_id"]): expectation
+        for pair in stability_pairs
+        for expectation in pair.get("sentinel_expectations", [])
+        if str(expectation["sentinel_id"]).casefold() != "announce / announcer"
+    }
+    for pair_id, expectation in hard_sentinel_by_id.items():
+        decisions = [str(row["resolution_decision"]) for row in stability_by_id[pair_id]]
+        if "MERGE" in decisions and any(decision != "MERGE" for decision in decisions):
+            sentinel_merge_flips.append({
+                "pair_id": pair_id,
+                "sentinel_id": expectation["sentinel_id"],
+                "decisions": decisions,
+            })
+    cross_phase_sentinel_variances = []
+    for pair_id, expectation in hard_sentinel_by_id.items():
+        pilot_decision = str(pilot_by_id[pair_id]["resolution_decision"])
+        stability_decisions = [str(row["resolution_decision"]) for row in stability_by_id[pair_id]]
+        if any((decision == "MERGE") != (pilot_decision == "MERGE") for decision in stability_decisions):
+            cross_phase_sentinel_variances.append({
+                "pair_id": pair_id,
+                "sentinel_id": expectation["sentinel_id"],
+                "pilot_resolution_decision": pilot_decision,
+                "stability_resolution_decisions": stability_decisions,
+                "acceptance_scope": "diagnostic_only_no_v02_evidence_rewritten",
+            })
+
+    v01_manual_path = v01_evidence_dir / "MANUAL_AUDIT_RESULTS.jsonl"
+    manual_labels = _required_jsonl(v01_manual_path)
+    if sha256_file(v01_manual_path).lower() != V01_MANUAL_LABELS_SHA256:
+        raise RuntimeError("immutable v0.1 manual-audit labels differ from the accepted SHA-256")
+    manual_ids = [str(row["pair_id"]) for row in manual_labels]
+    if len(manual_labels) != 40 or len(set(manual_ids)) != 40 or not set(manual_ids).issubset(set(pilot_by_id)):
+        raise RuntimeError("the immutable v0.1 40-label manual audit does not reconcile to the saved v0.2 pilot")
+    policy_agreements = sum(
+        str(label.get("manual_policy_decision")) == str(pilot_by_id[str(label["pair_id"])]["resolution_decision"])
+        for label in manual_labels
+    )
+    source_pilot_by_id = {str(row["pair_id"]): row for row in pilot_source}
+    v02_policy_agreements = sum(
+        str(label.get("manual_policy_decision")) == str(
+            (source_pilot_by_id[str(label["pair_id"])].get("normalized") or {}).get("policy_decision")
+        )
+        for label in manual_labels
+    )
+    relation_agreements = sum(
+        str(label.get("manual_relation")) == str(
+            (pilot_by_id[str(label["pair_id"])].get("normalized") or {}).get("concept_relation", {}).get("choice")
+        )
+        for label in manual_labels
+    )
+    historical_audit = {
+        "authority": "diagnostic_only",
+        "labels_modified": False,
+        "source_file": "MANUAL_AUDIT_RESULTS.jsonl",
+        "source_file_sha256": sha256_file(v01_manual_path),
+        "label_count": len(manual_labels),
+        "jev_policy_v02_agreement_count": v02_policy_agreements,
+        "jev_policy_v02_agreement_rate": round(v02_policy_agreements / len(manual_labels), 6),
+        "policy_agreement_count": policy_agreements,
+        "policy_agreement_rate": round(policy_agreements / len(manual_labels), 6),
+        "relation_agreement_count": relation_agreements,
+        "relation_agreement_rate": round(relation_agreements / len(manual_labels), 6),
+    }
+
+    pilot_valid = sum(row.get("status") == "completed" for row in pilot_outcomes)
+    pilot_gates = {
+        "120_of_120_saved_v02_outcomes_replayed": len(pilot_outcomes) == PILOT_SIZE and pilot_valid == PILOT_SIZE,
+        "all_7_hard_expected_merge_sentinels_resolve_merge": len(pilot_merge_sentinels) == 7 and all(row["pass"] for row in pilot_merge_sentinels),
+        "all_4_hard_expected_not_merge_sentinels_resolve_separate_or_review": len(pilot_nonmerge_sentinels) == 4 and all(row["pass"] for row in pilot_nonmerge_sentinels),
+        "announce_announcer_is_diagnostic_only": sum(row.get("v03_qa_role") == "DIAGNOSTIC_ONLY" for row in pilot_sentinels) == 1,
+    }
+    stability_gates = {
+        "40_of_40_pairs_have_three_replicates_and_exact_resolution_agreement": len(stability_rows) == STABILITY_SIZE and stable_count == STABILITY_SIZE and all(row["replicate_count"] == STABILITY_REPETITIONS for row in stability_rows),
+        "all_11_hard_sentinel_pairs_reconcile_to_three_replicates": len(stability_hard_sentinels) == 11 and all(len(row["resolution_decisions"]) == STABILITY_REPETITIONS for row in stability_hard_sentinels),
+        "zero_hard_sentinel_merge_nonmerge_flips": not sentinel_merge_flips,
+    }
+
+    native_jev_v02_stability = {
+        "exact_agreement_count": native_stable_count,
+        "candidate_count": len(stability_rows),
+        "exact_agreement_rate": round(native_stable_count / len(stability_rows), 6) if stability_rows else 0.0,
+        "transition_patterns": dict(sorted(native_policy_transition_patterns.items())),
+        "source_v02_qa_sha256": sha256_file(v02_evidence_dir / "STABILITY_QA.json"),
+    }
+    source_stability_qa = json.loads((v02_evidence_dir / "STABILITY_QA.json").read_text(encoding="utf-8"))
+    for key in (
+        "per_question_value_deltas",
+        "per_question_probability_deltas",
+        "per_question_confidence_deltas",
+        "native_decision_exact_agreement_count",
+        "native_decision_transition_patterns",
+    ):
+        if key in source_stability_qa:
+            native_jev_v02_stability[key] = source_stability_qa[key]
+
+    source_files_to_check = (
+        "CANDIDATE_PAIRS.jsonl",
+        "PILOT_SELECTION.jsonl",
+        "STABILITY_SELECTION.jsonl",
+        "PILOT_OUTCOMES.jsonl",
+        "STABILITY_OUTCOMES.jsonl",
+        "RAW_REQUEST_RESPONSE_EVIDENCE.jsonl.gz",
+        "YEE37_PAIR_PILOT.sqlite",
+    )
+    source_file_hashes = {
+        name: v02_hashes[name]["sha256"] for name in source_files_to_check
+    }
+    input_hashes_before_after = {
+        "yee31_advance_review_set": {"before": advance_before, "after": None},
+        "yee30_retrieval_db": {"before": y30_before, "after": None},
+    }
+    source_outcome_evidence_sha = sha256_bytes(canonical_json([
+        {"pair_id": row["pair_id"], "replicate_id": row.get("replicate_id"), "normalized": row["normalized"]}
+        for row in pilot_source + stability_source
+    ]).encode("utf-8"))
+    derived_outcome_evidence_sha = sha256_bytes(canonical_json([
+        {"pair_id": row["pair_id"], "replicate_id": row.get("replicate_id"), "normalized": row["normalized"]}
+        for row in pilot_outcomes + stability_outcomes
+    ]).encode("utf-8"))
+    all_gates = {**pilot_gates, **stability_gates}
+    status = "PASS" if all(all_gates.values()) else "FAIL"
+    def replay_metrics(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+        normalized_rows = [row["normalized"] for row in rows if row.get("normalized")]
+        return {
+            "outcome_count": len(rows),
+            "failed_outcome_count": sum(row.get("status") != "completed" for row in rows),
+            "http_attempt_count": sum(int(row.get("attempt_count", 0)) for row in rows),
+            "retry_attempt_count": sum(max(0, int(row.get("attempt_count", 0)) - 1) for row in rows),
+            "returned_model_distribution": dict(sorted(Counter(
+                str(row.get("returned_model")) for row in normalized_rows
+            ).items())),
+            "usage_tokens": {
+                "input_tokens": sum(int((row.get("usage") or {}).get("input_tokens", 0)) for row in normalized_rows),
+                "output_tokens": sum(int((row.get("usage") or {}).get("output_tokens", 0)) for row in normalized_rows),
+            },
+            "probability_qa": _probability_qa([{"normalized": row} for row in normalized_rows]),
+        }
+    qa = {
+        "work_order": "YEE-37",
+        "status": "PAIR_RESOLUTION_V03_READY_FOR_SUPERVISOR_REVIEW",
+        "resolution_gate_status": status,
+        "execution_mode": "offline_v0.3_post_inference_replay",
+        "jev_or_network_requests": 0,
+        "code_commit": code_commit,
+        "resolution_policy_version": RESOLUTION_POLICY_VERSION,
+        "inference_contract_versions_unchanged": {
+            "pair_state_version": PAIR_STATE_VERSION,
+            "question_set_version": PAIR_QUESTION_SET_VERSION,
+            "pair_policy_version": PAIR_POLICY_VERSION,
+            "pair_output_version": PAIR_OUTPUT_VERSION,
+            "requested_model_alias": run_metadata["requested_model_alias"],
+            "expected_model_version": EXPECTED_MODEL_VERSION,
+        },
+        "run_id": run_metadata["run_id"],
+        "accepted_input_hashes_before_after": input_hashes_before_after,
+        "candidate_universe": {
+            "pair_count": len(candidate_pairs),
+            "unique_pair_id_count": len({str(row["pair_id"]) for row in candidate_pairs}),
+            "sha256": source_file_hashes["CANDIDATE_PAIRS.jsonl"],
+            "accepted_sha256_preserved": source_file_hashes["CANDIDATE_PAIRS.jsonl"] == V02_CANDIDATE_UNIVERSE_SHA256,
+            "byte_identical_to_v01": v01_hashes["CANDIDATE_PAIRS.jsonl"] == source_file_hashes["CANDIDATE_PAIRS.jsonl"],
+            "pilot_selection_sha256": source_file_hashes["PILOT_SELECTION.jsonl"],
+            "pilot_selection_byte_identical_to_v01": v01_hashes["PILOT_SELECTION.jsonl"] == source_file_hashes["PILOT_SELECTION.jsonl"],
+            "stability_selection_sha256": source_file_hashes["STABILITY_SELECTION.jsonl"],
+            "stability_selection_byte_identical_to_v01": v01_hashes["STABILITY_SELECTION.jsonl"] == source_file_hashes["STABILITY_SELECTION.jsonl"],
+        },
+        "pilot": {
+            "selected_identity_count": len(pilot_pairs),
+            "replayed_outcome_count": len(pilot_outcomes),
+            "valid_typed_responses": pilot_valid,
+            "jev_policy_decision_v02_counts": _decision_counts(pilot_outcomes, "jev_policy_decision_v02"),
+            "resolution_decision_counts": _decision_counts(pilot_outcomes, "resolution_decision"),
+            "resolution_source_counts": _decision_counts(pilot_outcomes, "resolution_source"),
+            "hard_sentinel_results": pilot_hard_sentinels,
+            "diagnostic_sentinel_results": [row for row in pilot_sentinels if not row["hard_gate"]],
+            "gates": pilot_gates,
+        },
+        "stability": {
+            "selected_pair_count": len(stability_pairs),
+            "replayed_replicate_count": len(stability_outcomes),
+            "runs_per_pair": STABILITY_REPETITIONS,
+            "resolution_exact_agreement_count": stable_count,
+            "resolution_exact_agreement_rate": round(stable_count / len(stability_rows), 6) if stability_rows else 0.0,
+            "resolution_transition_patterns": dict(sorted(resolution_transition_patterns.items())),
+            "resolution_decision_counts": _decision_counts(stability_outcomes, "resolution_decision"),
+            "resolution_source_counts": _decision_counts(stability_outcomes, "resolution_source"),
+            "jev_policy_decision_v02_counts": _decision_counts(stability_outcomes, "jev_policy_decision_v02"),
+            "jev_policy_v02_stability_diagnostic": native_jev_v02_stability,
+            "pair_reconciliation": stability_rows,
+            "hard_sentinel_results": stability_hard_sentinels,
+            "diagnostic_sentinel_results": [row for row in stability_sentinels if not row["hard_gate"]],
+            "hard_sentinel_merge_nonmerge_flips": sentinel_merge_flips,
+            "pilot_vs_stability_hard_sentinel_variances": cross_phase_sentinel_variances,
+            "gates": stability_gates,
+        },
+        "historical_v01_manual_audit": historical_audit,
+        "source_v02_execution_metrics": {
+            "pilot": replay_metrics(pilot_outcomes),
+            "stability": replay_metrics(stability_outcomes),
+            "all": replay_metrics(pilot_outcomes + stability_outcomes),
+        },
+        "evidence_integrity": {
+            "source_v02_file_inventory_before": v02_before,
+            "source_v01_file_inventory_before": v01_before,
+            "source_v02_selected_file_hashes_before_after": {name: {"before": digest, "after": None} for name, digest in source_file_hashes.items()},
+            "raw_evidence_record_count": raw_evidence_count,
+            "raw_response_and_model_evidence_unchanged": source_outcome_evidence_sha == derived_outcome_evidence_sha,
+            "normalized_v02_evidence_sha256_before": source_outcome_evidence_sha,
+            "normalized_v02_evidence_sha256_after": derived_outcome_evidence_sha,
+        },
+        "all_gates": all_gates,
+        "full_pair_adjudication_and_family_build": "NOT_RUN_BLOCKED_PENDING_SUPERVISOR_REVIEW",
+    }
+
+    if output_dir.exists():
+        unexpected = [path.name for path in output_dir.iterdir() if path.is_file() and path.name not in {
+            "PILOT_OUTCOMES_V03.jsonl", "PILOT_OUTCOMES_V03.csv",
+            "STABILITY_OUTCOMES_V03.jsonl", "STABILITY_OUTCOMES_V03.csv",
+            "RESOLUTION_QA_V03.json", "FINAL_REPORT_V03.md", "MANIFEST_V03.json",
+        }]
+        if unexpected:
+            raise RuntimeError(f"v0.3 output directory contains unrelated files: {', '.join(sorted(unexpected))}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_jsonl(output_dir / "PILOT_OUTCOMES_V03.jsonl", pilot_outcomes, rebuild=True)
+    _write_resolution_csv(output_dir / "PILOT_OUTCOMES_V03.csv", pilot_outcomes)
+    _write_jsonl(output_dir / "STABILITY_OUTCOMES_V03.jsonl", stability_outcomes, rebuild=True)
+    _write_resolution_csv(output_dir / "STABILITY_OUTCOMES_V03.csv", stability_outcomes)
+
+    advance_after = sha256_file(advance_path).lower()
+    y30_after = sha256_file(retrieval_db).lower()
+    v02_after = _directory_hashes(v02_evidence_dir)
+    v01_after = _directory_hashes(v01_evidence_dir)
+    if advance_before != advance_after or y30_before != y30_after:
+        raise RuntimeError("accepted YEE-31/YEE-30 canonical input changed during v0.3 offline replay")
+    if v02_before != v02_after or v01_before != v01_after:
+        raise RuntimeError("v0.1/v0.2 immutable source evidence changed during v0.3 offline replay")
+    input_hashes_before_after["yee31_advance_review_set"]["after"] = advance_after
+    input_hashes_before_after["yee30_retrieval_db"]["after"] = y30_after
+    for name, digest in source_file_hashes.items():
+        qa["evidence_integrity"]["source_v02_selected_file_hashes_before_after"][name]["after"] = digest
+    qa["evidence_integrity"]["source_v02_file_inventory_after"] = v02_after
+    qa["evidence_integrity"]["source_v01_file_inventory_after"] = v01_after
+    qa["evidence_integrity"]["source_file_inventories_unchanged"] = True
+
+    _write_rebuilt_json(output_dir / "RESOLUTION_QA_V03.json", qa)
+    report_lines = [
+        "# YEE-37 Hybrid Resolution Policy v0.3 — Offline Replay",
+        "",
+        f"Status: `{qa['status']}`",
+        f"Replay gates: **{status}**",
+        f"Code commit: `{code_commit}`",
+        f"Source v0.2 run: `{run_metadata['run_id']}`",
+        f"Resolution policy: `{RESOLUTION_POLICY_VERSION}`",
+        "",
+        "No Jev/provider/network calls were made. No v0.2 inference outcomes, typed answers, SQLite, raw request/response evidence, or v0.1 manual labels were modified.",
+        "",
+        "## Resolution policy",
+        "",
+        "1. Explicit trailing version qualifier → `KEEP_SEPARATE` / `VERSION_QUALIFIER`.",
+        "2. Existing exact `separator_insensitive_alphanumeric_equality` blocker → `MERGE` / `EXACT_FORM_ALIAS`.",
+        "3. Otherwise preserve v0.2 Jev policy → `JEV_V02`.",
+        "",
+        "Jev v0.2 policy decisions and typed answers remain separate, unchanged evidence beside `resolution_decision` and `resolution_source`.",
+        "",
+        "## Pilot and stability replay",
+        "",
+        f"- Pilot outcomes reconciled: {qa['pilot']['replayed_outcome_count']}/{PILOT_SIZE}.",
+        f"- Pilot Jev v0.2 decisions: `{canonical_json(qa['pilot']['jev_policy_decision_v02_counts'])}`.",
+        f"- Pilot v0.3 resolution decisions: `{canonical_json(qa['pilot']['resolution_decision_counts'])}`.",
+        f"- Hard sentinels: MERGE {sum(row['pass'] for row in pilot_merge_sentinels)}/{len(pilot_merge_sentinels)}; NOT_MERGE {sum(row['pass'] for row in pilot_nonmerge_sentinels)}/{len(pilot_nonmerge_sentinels)}.",
+        f"- Stability exact resolution agreement: {stable_count}/{STABILITY_SIZE}.",
+        f"- Stability resolution transitions: `{canonical_json(qa['stability']['resolution_transition_patterns'])}`.",
+        f"- Native Jev v0.2 exact agreement (diagnostic): {native_stable_count}/{STABILITY_SIZE}.",
+        f"- Hard-sentinel MERGE/non-MERGE flips: {len(sentinel_merge_flips)}.",
+        "- `announce / announcer`: diagnostic-only per supervisor addendum; retained historical v0.2 expectation/result is not a hard-gate failure.",
+        f"- Pilot-vs-stability hard-sentinel class differences (diagnostic): `{canonical_json(cross_phase_sentinel_variances)}`.",
+        "",
+        "## Evidence and audit",
+        "",
+        f"- Raw request/response archive: {raw_evidence_count} records; source SHA-256 `{v02_hashes['RAW_REQUEST_RESPONSE_EVIDENCE.jsonl.gz']['sha256']}`.",
+        f"- v0.2 SQLite SHA-256 unchanged: `{v02_hashes['YEE37_PAIR_PILOT.sqlite']['sha256']}`.",
+        f"- Preserved v0.2 execution metrics: `{canonical_json(qa['source_v02_execution_metrics']['all'])}`.",
+        f"- v0.2 normalized/model evidence SHA-256 before/after: `{source_outcome_evidence_sha}` / `{derived_outcome_evidence_sha}`.",
+        f"- Historical immutable v0.1 audit agreement (diagnostic only): Jev v0.2 policy {v02_policy_agreements}/40 → v0.3 resolution {policy_agreements}/40; relation {relation_agreements}/40.",
+        f"- Accepted YEE-31 SHA-256 before/after: `{advance_before}` / `{advance_after}`.",
+        f"- Accepted YEE-30 SHA-256 before/after: `{y30_before}` / `{y30_after}`.",
+        "",
+        "Source v0.2 evidence folder: https://drive.google.com/drive/folders/1sTMBOSMGu_jFV-wUTOEOQmIbmok5qXbS",
+        "Source v0.1 manual-label folder: https://drive.google.com/drive/folders/15ocxVaXqXdNLLy-CXjqyBcjLmMFXV-wp",
+        "",
+        "No live inference, full 1,190-pair adjudication, or family build was run. PR #4 remains open/draft/unmerged pending supervisor review.",
+        "",
+    ]
+    _write_rebuilt(output_dir / "FINAL_REPORT_V03.md", "\n".join(report_lines).encode("utf-8"))
+    artifact_files = []
+    for path in sorted(output_dir.iterdir(), key=lambda item: item.name):
+        if path.is_file() and path.name != "MANIFEST_V03.json":
+            artifact_files.append({"path": path.name, "bytes": path.stat().st_size, "sha256": sha256_file(path)})
+    manifest = {
+        "work_order": "YEE-37",
+        "status": qa["status"],
+        "resolution_gate_status": status,
+        "code_commit": code_commit,
+        "resolution_policy_version": RESOLUTION_POLICY_VERSION,
+        "source_v02_run_id": run_metadata["run_id"],
+        "inference_contract_versions_unchanged": qa["inference_contract_versions_unchanged"],
+        "accepted_input_hashes_before_after": input_hashes_before_after,
+        "candidate_universe_and_selection_sha256": {
+            name: v02_hashes[name]["sha256"]
+            for name in ("CANDIDATE_PAIRS.jsonl", "PILOT_SELECTION.jsonl", "STABILITY_SELECTION.jsonl")
+        },
+        "source_v02_evidence_inventory": v02_after,
+        "source_v01_manual_audit_inventory": v01_after,
+        "source_v02_drive_folder": "https://drive.google.com/drive/folders/1sTMBOSMGu_jFV-wUTOEOQmIbmok5qXbS",
+        "source_v01_drive_folder": "https://drive.google.com/drive/folders/15ocxVaXqXdNLLy-CXjqyBcjLmMFXV-wp",
+        "artifact_files": artifact_files,
+        "jev_or_network_requests": 0,
+        "full_adjudication_or_family_build": False,
+    }
+    _write_rebuilt_json(output_dir / "MANIFEST_V03.json", manifest)
+    return {
+        "status": qa["status"],
+        "resolution_gate_status": status,
+        "pilot_replayed": len(pilot_outcomes),
+        "stability_replicates_replayed": len(stability_outcomes),
+        "resolution_stability": f"{stable_count}/{STABILITY_SIZE}",
+        "network_requests": 0,
+        "output_dir": str(output_dir),
+    }
+
+
 def _pair_state_size_rows(
     pairs: list[Mapping[str, Any]],
     topics_by_key: Mapping[str, Mapping[str, Any]],
@@ -675,9 +1260,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     advance_path = Path(args.advance_set).resolve()
     retrieval_db = Path(args.input_db).resolve()
     output_dir = Path(args.output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    questions, question_sha = load_pair_questions()
     code_commit = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=Path(__file__).resolve().parents[2],
@@ -685,6 +1267,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+    if args.offline_v03_replay:
+        if not args.v02_evidence_dir or not args.v01_evidence_dir:
+            raise RuntimeError("offline v0.3 replay requires --v02-evidence-dir and --v01-evidence-dir")
+        return _offline_v03_replay(
+            output_dir,
+            Path(args.v02_evidence_dir).resolve(),
+            Path(args.v01_evidence_dir).resolve(),
+            advance_path,
+            retrieval_db,
+            code_commit,
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    questions, question_sha = load_pair_questions()
     y30_metadata, topics, input_hashes = load_accepted_advance_topics(advance_path, retrieval_db)
     topic_by_key = {str(topic["topic_key"]): topic for topic in topics}
     pairs = generate_candidate_pairs(topics, input_hashes)
@@ -1000,9 +1597,18 @@ def main() -> None:
         action="store_true",
         help="Verify v0.2 state sizes and exact v0.1 pair/selection identities without network calls.",
     )
+    mode.add_argument(
+        "--offline-v03-replay",
+        action="store_true",
+        help="Replay saved v0.2 pilot/stability outcomes through resolution policy v0.3 with zero network calls.",
+    )
+    parser.add_argument(
+        "--v02-evidence-dir",
+        help="Accepted immutable v0.2 evidence directory, required for --offline-v03-replay.",
+    )
     parser.add_argument(
         "--v01-evidence-dir",
-        help="Accepted immutable v0.1 evidence directory, required for --offline-v02-preflight.",
+        help="Accepted immutable v0.1 evidence directory, required for v0.2 preflight or v0.3 audit comparison.",
     )
     args = parser.parse_args()
     print(json.dumps(run(args), ensure_ascii=False, sort_keys=True))

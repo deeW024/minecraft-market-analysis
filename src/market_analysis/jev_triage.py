@@ -172,10 +172,12 @@ class JevTransportError(RuntimeError):
         status_code: int | None = None,
         request_id: str | None = None,
         error_body: str | None = None,
+        connection_timeout_failure: bool = False,
     ) -> None:
         self.status_code = status_code
         self.request_id = request_id
         self.error_body = error_body
+        self.connection_timeout_failure = connection_timeout_failure
         details = message
         if status_code is not None:
             details = f"{message} (status={status_code})"
@@ -353,7 +355,7 @@ def _complete_with_sdk(
                     retry=RetryPolicy(max_retries=0),
                     timeout=transport.timeout,
                 )
-            except Exception:
+            except Exception as exc:
                 captured = transport._evidence_transport.last_response
                 if transport._evidence_transport.persistence_failure:
                     stage = transport._evidence_transport.persistence_failure
@@ -368,7 +370,25 @@ def _complete_with_sdk(
                         request_id=captured.request_id,
                         error_body=error_body or None,
                     ) from None
-                raise JevTransportError("Jev HTTP request failed (connection or timeout)") from None
+                connection_timeout = isinstance(
+                    exc,
+                    (
+                        httpx2.TimeoutException,
+                        httpx2.ConnectError,
+                        httpx2.NetworkError,
+                        TimeoutError,
+                        ConnectionError,
+                    ),
+                )
+                message = (
+                    "Jev HTTP request failed (connection or timeout)"
+                    if connection_timeout
+                    else "Jev SDK request failed without a captured HTTP response"
+                )
+                raise JevTransportError(
+                    message,
+                    connection_timeout_failure=connection_timeout,
+                ) from None
             captured = transport._evidence_transport.last_response
             if captured is None:
                 raise JevTransportError("Jev HTTP request completed without a captured response")
