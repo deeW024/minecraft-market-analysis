@@ -10,7 +10,7 @@ import sqlite3
 import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .jev_triage import canonical_json, sha256_file
 from .pipeline import quantile, round_number
@@ -559,14 +559,21 @@ def _read_accepted_inputs(yee37_db: Path, yee30_db: Path, yee29_db: Path) -> tup
         membership_identity_sets: dict[str, set[str]] = defaultdict(set)
         for row in rows["family_resource_memberships"]:
             membership_identity_sets[row["family_id"]].add(row["canonical_identity"])
+        unresolved_evidence_identities = 0
         for family_id, count in evidence_counts.items():
-            if not membership_identity_sets[family_id].issuperset(_evidence_identities(connection, family_id)):
+            unresolved = _evidence_identities(connection, family_id) - membership_identity_sets[family_id]
+            unresolved_evidence_identities += len(unresolved)
+            if unresolved:
                 raise FamilySignalInputError(f"YEE-37 evidence examples do not resolve to family memberships: {family_id}")
         details = {
             **metadata,
             "family_count": family_count,
             "topic_key_count": unique_topic_count,
             "topic_membership_occurrence_count": len(occurrences),
+            "membership_join_resolved": bool(occurrences)
+            and all(row["canonical_identity"] and row["source_resource_id"] for row in occurrences),
+            "evidence_membership_resolution": unresolved_evidence_identities == 0,
+            "unresolved_evidence_identity_count": unresolved_evidence_identities,
             "resource_membership_count": rows["deduplicated_membership_count"],
             "membership_deduplication_count": len(occurrences) - rows["deduplicated_membership_count"],
             "source_membership_counts": dict(sorted(Counter(
@@ -734,6 +741,68 @@ def _output_checks(output_dir: Path, rows: Mapping[str, Sequence[Mapping[str, An
     }
 
 
+def _semantic_reconciliation(rows: Mapping[str, Sequence[Mapping[str, Any]]]) -> dict[str, Any]:
+    features = {row["family_id"]: row for row in rows["family_features"]}
+    signals = {(row["family_id"], row["source"]): row for row in rows["family_source_signals"]}
+    memberships_by_family: Counter[str] = Counter(row["family_id"] for row in rows["family_resource_memberships"])
+    presence_mismatches = 0
+    wide_metric_mismatches = 0
+    metadata_mismatches = 0
+    for family_id, feature in features.items():
+        family_signals = {source: signals[(family_id, source)] for source in SOURCE_ORDER if (family_id, source) in signals}
+        presence = [source for source in SOURCE_ORDER if source in family_signals]
+        expected_class = {1: "single_source", 2: "two_source", 3: "three_source"}.get(len(presence))
+        if (
+            feature["source_presence"] != presence
+            or feature["source_presence_count"] != len(presence)
+            or feature["signal_source_count"] != len(presence)
+            or feature["has_voxel"] != ("voxel" in presence)
+            or feature["has_modrinth"] != ("modrinth" in presence)
+            or feature["has_hangar"] != ("hangar" in presence)
+            or feature["cross_market_presence_class"] != expected_class
+        ):
+            presence_mismatches += 1
+        if feature["resource_membership_count_total"] != memberships_by_family[family_id]:
+            metadata_mismatches += 1
+        if feature["has_voxel_paid_evidence"] != bool(family_signals.get("voxel", {}).get("voxel_paid_count", 0) > 0):
+            metadata_mismatches += 1
+        expected_coverage = _share(feature["evidence_example_identity_count"], memberships_by_family[family_id])
+        if feature["evidence_coverage_share"] != expected_coverage:
+            metadata_mismatches += 1
+        for source, signal in family_signals.items():
+            for field in COMMON_SIGNAL_FIELDS + SOURCE_SIGNAL_FIELDS[source]:
+                if feature.get(_wide_signal_name(source, field)) != signal.get(field):
+                    wide_metric_mismatches += 1
+
+    price_keys = [(row["family_id"], row["currency"]) for row in rows["family_voxel_price_signals"]]
+    price_family_mismatches = sum(
+        row["family_id"] not in features or not features[row["family_id"]]["has_voxel_paid_evidence"]
+        for row in rows["family_voxel_price_signals"]
+    )
+    membership_mismatches = sum(
+        row["canonical_identity"] != f"{row['source']}:{row['source_resource_id']}"
+        or not row["matched_topic_keys"]
+        or row["matched_topic_keys"] != sorted(set(row["matched_topic_keys"]))
+        or row["canonical_topic_key"] != features[row["family_id"]]["canonical_topic_key"]
+        or row["family_status"] != features[row["family_id"]]["family_status"]
+        for row in rows["family_resource_memberships"]
+    )
+    forbidden = {"opportunity_score", "rank", "ranking", "shortlist", "winner", "recommendation"}
+    output_columns = {column.casefold() for columns in EXPORT_TABLES.values() for column in columns}
+    return {
+        "family_presence_mismatch_count": presence_mismatches,
+        "source_wide_metric_mismatch_count": wide_metric_mismatches,
+        "family_signal_metadata_mismatch_count": metadata_mismatches,
+        "voxel_price_family_mismatch_count": price_family_mismatches,
+        "voxel_price_duplicate_family_currency_count": len(price_keys) - len(set(price_keys)),
+        "membership_provenance_mismatch_count": membership_mismatches,
+        "forbidden_decision_field_count": sum(
+            any(term in column for term in forbidden) for column in output_columns
+        ),
+        "source_rows_are_independently_aggregated": all(row["source"] in SOURCE_ORDER for row in rows["family_source_signals"]),
+    }
+
+
 def _hashes(paths: Mapping[str, Path]) -> dict[str, str]:
     return {key: sha256_file(path) for key, path in paths.items()}
 
@@ -839,6 +908,7 @@ def build_family_signal_layer(
 
     hashes_after = _hashes(paths)
     counts = {table: len(rows[table]) for table in EXPORT_TABLES}
+    semantic_checks = _semantic_reconciliation(rows)
     checks: dict[str, bool] = {
         "accepted_input_hashes_match": hashes_before == EXPECTED_INPUT_HASHES,
         "canonical_inputs_unchanged": hashes_after == hashes_before,
@@ -846,20 +916,35 @@ def build_family_signal_layer(
         "exact_yee37_topic_universe": input_details["topic_key_count"] == EXPECTED_TOPIC_COUNT,
         "every_family_retained_including_singletons": counts["family_features"] == EXPECTED_FAMILY_COUNT,
         "topic_keys_map_to_one_family": input_details["topic_key_resource_membership_reconciliation"],
-        "all_resource_memberships_resolve_to_y30_and_y29": True,
-        "family_source_identity_memberships_are_unique": counts["family_resource_memberships"] == rows["deduplicated_membership_count"],
-        "alias_overlap_deduplication_applied": input_details["membership_deduplication_count"] >= 0,
-        "evidence_examples_resolve_to_memberships": True,
-        "source_presence_and_membership_counts_reconcile": output_checks["family_presence_and_total_membership_reconciles"],
-        "family_source_resource_counts_reconcile": output_checks["family_source_resource_count_reconciles"],
-        "source_local_demand_percentiles_and_download_metrics": True,
-        "no_cross_source_download_sum_or_score_fields": not any(
-            "total_downloads" in column or "opportunity_score" in column or "rank" == column
-            for column in FAMILY_COLUMNS
+        "all_resource_memberships_resolve_to_y30_and_y29": input_details["membership_join_resolved"],
+        "family_source_identity_memberships_are_unique": len({
+            (row["family_id"], row["source"], row["canonical_identity"])
+            for row in rows["family_resource_memberships"]
+        }) == counts["family_resource_memberships"],
+        "alias_overlap_deduplication_applied": (
+            input_details["topic_membership_occurrence_count"]
+            == counts["family_resource_memberships"] + input_details["membership_deduplication_count"]
+            and input_details["membership_deduplication_count"] >= 0
         ),
-        "voxel_price_signals_are_paid_and_currency_separated": all(
-            row["currency"] is None or row["currency"] for row in rows["family_voxel_price_signals"]
-        ) and all(row["family_id"] in {f["family_id"] for f in rows["family_features"]} for row in rows["family_voxel_price_signals"]),
+        "evidence_examples_resolve_to_memberships": input_details["evidence_membership_resolution"],
+        "source_presence_and_membership_counts_reconcile": (
+            output_checks["family_presence_and_total_membership_reconciles"]
+            and semantic_checks["family_presence_mismatch_count"] == 0
+            and semantic_checks["family_signal_metadata_mismatch_count"] == 0
+        ),
+        "family_source_resource_counts_reconcile": output_checks["family_source_resource_count_reconciles"],
+        "source_local_demand_percentiles_and_download_metrics": (
+            semantic_checks["source_rows_are_independently_aggregated"]
+            and semantic_checks["source_wide_metric_mismatch_count"] == 0
+        ),
+        "no_cross_source_download_sum_or_score_fields": (
+            semantic_checks["forbidden_decision_field_count"] == 0
+            and not any("total_downloads" in column for column in FAMILY_COLUMNS)
+        ),
+        "voxel_price_signals_are_paid_and_currency_separated": (
+            semantic_checks["voxel_price_family_mismatch_count"] == 0
+            and semantic_checks["voxel_price_duplicate_family_currency_count"] == 0
+        ),
         "sqlite_integrity_check": output_checks["sqlite_integrity_ok"],
         "sqlite_foreign_key_check": output_checks["foreign_key_check_ok"],
         "output_table_counts_match_exports": output_checks["table_counts_match_exports"],
@@ -870,6 +955,7 @@ def build_family_signal_layer(
         "input": input_details,
         "output_counts": counts,
         "output_checks": output_checks,
+        "semantic_reconciliation": semantic_checks,
         "input_hashes_after": hashes_after,
         "replay": {
             "byte_identical_sqlite_and_exports": replay_identical,

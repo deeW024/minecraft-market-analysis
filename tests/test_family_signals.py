@@ -12,6 +12,7 @@ from market_analysis.family_signals import (
     _csv_cell,
     _output_checks,
     _read_only_connection,
+    _semantic_reconciliation,
     _write_payload,
     aggregate_family_source,
     assemble_signal_rows,
@@ -243,3 +244,11 @@ def test_export_tables_cover_required_deliverables():
     }
     assert "cross_market_presence_class" in EXPORT_TABLES["family_features"]
     assert "canonical_topic_key" in EXPORT_TABLES["family_resource_memberships"]
+    checks = _semantic_reconciliation(_fixture_rows())
+    assert checks["family_presence_mismatch_count"] == 0
+    assert checks["source_wide_metric_mismatch_count"] == 0
+    assert checks["family_signal_metadata_mismatch_count"] == 0
+    assert checks["voxel_price_family_mismatch_count"] == 0
+    assert checks["voxel_price_duplicate_family_currency_count"] == 0
+    assert checks["membership_provenance_mismatch_count"] == 0
+    assert checks["forbidden_decision_field_count"] == 0
