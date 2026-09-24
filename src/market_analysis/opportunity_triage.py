@@ -55,7 +55,9 @@ SOURCE_INPUT_COLUMNS = (
     "demand_percentile_ge90_share", "demand_percentile_ge95_share",
     "freshness_age_days_p50", "freshness_le90_share", "freshness_gt365_share",
     "demand_concentration_top1_share", "demand_concentration_hhi",
+    "paid_count", "paid_known_count", "paid_share_known",
 )
+VOXEL_PAID_COLUMNS = ("paid_count", "paid_known_count", "paid_share_known")
 SOURCE_COMPONENT_COLUMNS = (
     "family_id", "source", "D", "W", "F", "C",
     "source_score_balanced", "source_score_demand_first", "source_score_whitespace_first",
@@ -80,7 +82,8 @@ TEXT_COLUMNS = {
 JSON_COLUMNS = {"member_topic_keys", "aliases", "candidate_classes", "source_presence"}
 INTEGER_COLUMNS = {
     "member_count", "source_presence_count", "has_voxel_paid_evidence", "resource_count",
-    "demand_available_count", "freshness_available_count", "balanced_rank", "demand_first_rank",
+    "demand_available_count", "freshness_available_count", "paid_count", "paid_known_count",
+    "balanced_rank", "demand_first_rank",
     "whitespace_first_rank", "median_profile_rank", "rank_span", "consensus_rank",
 } | {f"{source}_resource_count" for source in SOURCE_ORDER}
 
@@ -310,6 +313,57 @@ def _monetization_score(source_rows: Mapping[str, Mapping[str, Any]]) -> float |
     result = round_number(50 * (paid > 0) + 50 * share)
     _check_range(result, "voxel_monetization_score")
     return result
+
+
+def _monetization_counts(values: Sequence[float | int | None]) -> dict[str, int]:
+    return {
+        "non_null": sum(value is not None for value in values),
+        "positive": sum(value is not None and value > 0 for value in values),
+        "zero": sum(value == 0 for value in values),
+    }
+
+
+def _voxel_monetization_qa(
+    signal_rows: Sequence[Mapping[str, Any]],
+    component_rows: Sequence[Mapping[str, Any]],
+    family_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    canonical_voxel = {
+        row["family_id"]: row for row in signal_rows if row["source"] == "voxel"
+    }
+    components = {(row["family_id"], row["source"]): row for row in component_rows}
+    families = {row["family_id"]: row for row in family_rows}
+    component_field_mismatches = sum(
+        components.get((family_id, "voxel"), {}).get(field) != row.get(field)
+        for family_id, row in canonical_voxel.items()
+        for field in VOXEL_PAID_COLUMNS
+    )
+    expected_scores = {
+        family_id: _monetization_score({"voxel": row})
+        for family_id, row in canonical_voxel.items()
+    }
+    expected_scores.update({
+        family_id: None for family_id in families if family_id not in expected_scores
+    })
+    family_score_mismatches = sum(
+        row.get("voxel_monetization_score") != expected_scores[family_id]
+        for family_id, row in families.items()
+    )
+    expected_counts = _monetization_counts(list(expected_scores.values()))
+    actual_counts = _monetization_counts([
+        row.get("voxel_monetization_score") for row in family_rows
+    ])
+    production_counts = {"non_null": 655, "positive": 568, "zero": 87}
+    return {
+        "canonical_voxel_row_count": len(canonical_voxel),
+        "component_paid_field_mismatch_count": component_field_mismatches,
+        "family_score_mismatch_count": family_score_mismatches,
+        "canonical_input_expected_counts": expected_counts,
+        "family_score_actual_counts": actual_counts,
+        "pinned_production_expected_counts": production_counts,
+        "matches_canonical_input": component_field_mismatches == 0 and family_score_mismatches == 0,
+        "matches_pinned_production_counts": expected_counts == production_counts and actual_counts == production_counts,
+    }
 
 
 def _triage_bucket(rank: int) -> str:
@@ -550,13 +604,20 @@ def _range_violations(component_rows: Sequence[Mapping[str, Any]], family_rows: 
 
 def _formula_mismatches(
     component_rows: Sequence[Mapping[str, Any]], family_rows: Sequence[Mapping[str, Any]],
+    canonical_signal_rows: Sequence[Mapping[str, Any]],
 ) -> int:
     mismatches = 0
     components_by_source: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     components_by_family: dict[str, dict[str, Mapping[str, Any]]] = defaultdict(dict)
+    canonical_voxel = {
+        row["family_id"]: row for row in canonical_signal_rows if row["source"] == "voxel"
+    }
     for row in component_rows:
         components_by_source[row["source"]].append(row)
         components_by_family[row["family_id"]][row["source"]] = row
+    for family_id, canonical_row in canonical_voxel.items():
+        component = components_by_family.get(family_id, {}).get("voxel", {})
+        mismatches += sum(component.get(field) != canonical_row.get(field) for field in VOXEL_PAID_COLUMNS)
     for source_rows in components_by_source.values():
         supply_ranks = _midrank_percentiles([float(row["resource_count"]) for row in source_rows])
         ages = [row["freshness_age_days_p50"] for row in source_rows if row["freshness_age_days_p50"] is not None]
@@ -586,7 +647,7 @@ def _formula_mismatches(
     for row in family_rows:
         source_rows = components_by_family[row["family_id"]]
         expected_v = 50 * (int(row["source_presence_count"]) - 1)
-        expected_m = _monetization_score(source_rows)
+        expected_m = _monetization_score({"voxel": canonical_voxel.get(row["family_id"])})
         mismatches += int(row["cross_market_validation_score"] != expected_v)
         mismatches += int(row["voxel_monetization_score"] != expected_m)
         for profile in PROFILE_ORDER:
@@ -612,6 +673,8 @@ def _formula_mismatches(
 def _make_report(qa: Mapping[str, Any]) -> str:
     counts = qa["details"]["output_counts"]
     buckets = qa["details"]["triage_bucket_counts"]
+    voxel_qa = qa["details"]["voxel_monetization_qa"]
+    voxel_counts = voxel_qa["family_score_actual_counts"]
     return "\n".join((
         "# YEE-46 Opportunity Triage v0 — Final Report",
         "",
@@ -627,6 +690,7 @@ def _make_report(qa: Mapping[str, Any]) -> str:
         "",
         f"- Families: {counts['family_opportunity_scores']}; source component rows: {counts['source_opportunity_components']}; shortlist rows: {counts['opportunity_shortlist']}.",
         f"- Buckets: {buckets['ADVANCE_RESEARCH']} ADVANCE_RESEARCH, {buckets['WATCH']} WATCH, {buckets['DEFER']} DEFER.",
+        f"- Voxel monetization: {voxel_counts['non_null']} non-null M ({voxel_counts['positive']} positive, {voxel_counts['zero']} zero); canonical field/score mismatches: {voxel_qa['component_paid_field_mismatch_count']}/{voxel_qa['family_score_mismatch_count']}.",
         f"- Deterministic clean replay (SQLite + JSONL/CSV exports): {qa['checks']['deterministic_replay_byte_identical']}.",
         "- SQLite integrity/FK checks and all ranking, reconciliation, range, and boundary checks are recorded in `QA_RESULT.json`.",
         "",
@@ -732,7 +796,10 @@ def build_opportunity_triage(input_db: str | Path, output_dir: str | Path) -> di
     )
     ranges_valid = _range_violations(rows["source_opportunity_components"], rows["family_opportunity_scores"]) == 0
     formula_mismatch_count = _formula_mismatches(
-        rows["source_opportunity_components"], rows["family_opportunity_scores"]
+        rows["source_opportunity_components"], rows["family_opportunity_scores"], signal_rows
+    )
+    voxel_monetization_qa = _voxel_monetization_qa(
+        signal_rows, rows["source_opportunity_components"], rows["family_opportunity_scores"]
     )
     consensus_order = sorted(
         rows["family_opportunity_scores"],
@@ -746,6 +813,8 @@ def build_opportunity_triage(input_db: str | Path, output_dir: str | Path) -> di
         "exact_source_component_reconciliation": len(rows["source_opportunity_components"]) == 2503 and component_keys == source_keys,
         "component_and_profile_scores_in_range": ranges_valid,
         "score_component_and_aggregation_formulas_reconcile": formula_mismatch_count == 0,
+        "voxel_monetization_reconciles_to_canonical_input": voxel_monetization_qa["matches_canonical_input"],
+        "voxel_monetization_production_counts_match": voxel_monetization_qa["matches_pinned_production_counts"],
         "ranks_are_unique_1_to_1618": ranks_valid,
         "consensus_order_matches_spec": consensus_order_matches,
         "triage_bucket_boundaries_exact": bucket_counts == expected_buckets,
@@ -769,6 +838,7 @@ def build_opportunity_triage(input_db: str | Path, output_dir: str | Path) -> di
             for field in tuple(f"{profile}_final_score" for profile in PROFILE_ORDER)
         },
         "formula_mismatch_count": formula_mismatch_count,
+        "voxel_monetization_qa": voxel_monetization_qa,
         "output_checks": checks_output,
         "replay_artifact_sha256": dict(sorted(actual_hashes.items())),
     }

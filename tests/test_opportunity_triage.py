@@ -11,8 +11,10 @@ from market_analysis.opportunity_triage import (
     SCHEMA_VERSION,
     _assign_ranks,
     _consensus_order_key,
+    _formula_mismatches,
     _read_only_connection,
     _triage_bucket,
+    _voxel_monetization_qa,
     _write_artifacts,
     compute_family_scores,
     compute_source_components,
@@ -155,6 +157,44 @@ def test_voxel_monetization_null_and_missing_m_weight_renormalization():
     assert scores[0]["balanced_final_score"] == 75.789474
 
 
+def test_voxel_monetization_end_to_end_uses_canonical_signal_fields():
+    features = [
+        _feature("paid", ("voxel", "modrinth")),
+        _feature("free", ("voxel", "modrinth")),
+    ]
+    signals = [
+        _signal("paid", "voxel", paid_count=2, paid_known_count=4, paid_share_known=0.5),
+        _signal("paid", "modrinth"),
+        _signal("free", "voxel", paid_count=0, paid_known_count=3, paid_share_known=0),
+        _signal("free", "modrinth"),
+    ]
+    components = compute_source_components(signals)
+    voxel_components = {row["family_id"]: row for row in components if row["source"] == "voxel"}
+    assert {field: voxel_components["paid"][field] for field in ("paid_count", "paid_known_count", "paid_share_known")} == {
+        "paid_count": 2, "paid_known_count": 4, "paid_share_known": 0.5,
+    }
+    assert {field: voxel_components["free"][field] for field in ("paid_count", "paid_known_count", "paid_share_known")} == {
+        "paid_count": 0, "paid_known_count": 3, "paid_share_known": 0,
+    }
+
+    family_scores, _ = compute_family_scores(features, components)
+    scores_by_id = {row["family_id"]: row for row in family_scores}
+    assert scores_by_id["paid"]["voxel_monetization_score"] == 75
+    assert scores_by_id["free"]["voxel_monetization_score"] == 0
+    assert _formula_mismatches(components, family_scores, signals) == 0
+    qa = _voxel_monetization_qa(signals, components, family_scores)
+    assert qa["matches_canonical_input"] is True
+
+    stripped_components = [dict(row) for row in components]
+    for row in stripped_components:
+        if row["source"] == "voxel":
+            for field in ("paid_count", "paid_known_count", "paid_share_known"):
+                row.pop(field)
+    stripped_scores, _ = compute_family_scores(features, stripped_components)
+    assert _formula_mismatches(stripped_components, stripped_scores, signals) > 0
+    assert _voxel_monetization_qa(signals, stripped_components, stripped_scores)["matches_canonical_input"] is False
+
+
 def test_profile_ranks_consensus_ties_and_bucket_boundaries():
     rows = [
         {"family_id": "a", "balanced_final_score": 10, "demand_first_final_score": 8, "whitespace_first_final_score": 5},
@@ -190,6 +230,9 @@ def test_export_schema_has_required_context_and_excludes_raw_downloads():
     assert not any("downloads_total" in column for columns in EXPORT_TABLES.values() for column in columns)
     assert {"voxel_D", "modrinth_source_score_balanced", "hangar_resource_count"} <= set(
         EXPORT_TABLES["opportunity_shortlist"]
+    )
+    assert {"paid_count", "paid_known_count", "paid_share_known"} <= set(
+        EXPORT_TABLES["source_opportunity_components"]
     )
 
 
