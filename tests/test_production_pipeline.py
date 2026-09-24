@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from market_analysis import production_cli
 from market_analysis.concept_pairs import (
     EXPECTED_MODEL_ALIAS,
     EXPECTED_MODEL_VERSION,
@@ -28,6 +29,11 @@ from market_analysis.production_pipeline import (
     jsonl_bytes,
     plan_representative_coherence_edges,
 )
+
+
+def test_authorized_cli_has_pair_runner_and_coherence_state_builder():
+    assert production_cli.PairAdjudicationRunner is PairAdjudicationRunner
+    assert production_cli.build_pair_state is build_pair_state
 
 
 class _Provider:
