@@ -1,6 +1,7 @@
 # YEE-47 External Market Evidence v0 — schema and null semantics
 
-Schema version: `yee-47-external-market-evidence-v0.1`  
+Schema version: `yee-47-external-market-evidence-v0.1`
+
 Pilot authorization: consensus ranks 1–10 only. The YEE-46 shortlist and analysis database are immutable, read-only inputs.
 
 ## Tables and exports
