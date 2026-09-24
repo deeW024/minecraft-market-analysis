@@ -971,6 +971,19 @@ class PairAdjudicationRunner:
                 right_topic_key TEXT NOT NULL,
                 pair_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS coherence_edges (
+                pair_id TEXT PRIMARY KEY,
+                left_topic_key TEXT NOT NULL,
+                right_topic_key TEXT NOT NULL,
+                pair_json TEXT NOT NULL,
+                related_base_pair_id TEXT
+            );
+            CREATE VIEW IF NOT EXISTS pair_registry AS
+                SELECT pair_id,left_topic_key,right_topic_key,pair_json,'BASE_PAIR' AS pair_kind
+                FROM candidate_pairs
+                UNION ALL
+                SELECT pair_id,left_topic_key,right_topic_key,pair_json,'COHERENCE_EDGE' AS pair_kind
+                FROM coherence_edges;
             CREATE TABLE IF NOT EXISTS pair_runs (
                 cache_key TEXT PRIMARY KEY,
                 pair_id TEXT NOT NULL,
@@ -984,8 +997,7 @@ class PairAdjudicationRunner:
                 replicate_id TEXT,
                 status TEXT NOT NULL,
                 normalized_json TEXT,
-                last_error TEXT,
-                FOREIGN KEY (pair_id) REFERENCES candidate_pairs(pair_id)
+                last_error TEXT
             );
             CREATE TABLE IF NOT EXISTS pair_attempts (
                 cache_key TEXT NOT NULL,
@@ -1017,18 +1029,40 @@ class PairAdjudicationRunner:
         self.connection.commit()
 
     def register_candidate_pairs(self, pairs: list[Mapping[str, Any]]) -> None:
+        self._register_pairs(pairs, "candidate_pairs")
+
+    def register_coherence_edges(self, pairs: list[Mapping[str, Any]]) -> None:
+        if any(pair.get("edge_type") != "COHERENCE_EDGE" for pair in pairs):
+            raise InputIntegrityError("coherence registry accepts only COHERENCE_EDGE records")
+        for pair in pairs:
+            if self.connection.execute(
+                "SELECT 1 FROM candidate_pairs WHERE pair_id=?", (pair["pair_id"],)
+            ).fetchone():
+                raise InputIntegrityError("coherence edge identity collides with the base pair universe")
+        self._register_pairs(pairs, "coherence_edges")
+
+    def _register_pairs(self, pairs: list[Mapping[str, Any]], table: str) -> None:
+        if table not in {"candidate_pairs", "coherence_edges"}:
+            raise ValueError("unrecognized pair registry")
         for pair in pairs:
             pair_json = canonical_json(pair)
+            related_base_pair_id = pair.get("related_base_pair_id") if table == "coherence_edges" else None
             self.connection.execute(
-                "INSERT INTO candidate_pairs(pair_id,left_topic_key,right_topic_key,pair_json) VALUES (?,?,?,?) "
+                f"INSERT INTO {table}(pair_id,left_topic_key,right_topic_key,pair_json"
+                f"{',related_base_pair_id' if table == 'coherence_edges' else ''}) "
+                f"VALUES ({'?,?,?,?,?' if table == 'coherence_edges' else '?,?,?,?'}) "
                 "ON CONFLICT(pair_id) DO NOTHING",
-                (pair["pair_id"], pair["left_topic_key"], pair["right_topic_key"], pair_json),
+                (
+                    (pair["pair_id"], pair["left_topic_key"], pair["right_topic_key"], pair_json, related_base_pair_id)
+                    if table == "coherence_edges"
+                    else (pair["pair_id"], pair["left_topic_key"], pair["right_topic_key"], pair_json)
+                ),
             )
             saved = self.connection.execute(
-                "SELECT pair_json FROM candidate_pairs WHERE pair_id=?", (pair["pair_id"],)
+                f"SELECT pair_json FROM {table} WHERE pair_id=?", (pair["pair_id"],)
             ).fetchone()
             if saved["pair_json"] != pair_json:
-                raise InputIntegrityError(f"candidate-pair evidence changed for {pair['pair_id']}")
+                raise InputIntegrityError(f"pair evidence changed for {pair['pair_id']}")
         self.connection.commit()
 
     def _request(self, pair: Mapping[str, Any], state: Mapping[str, Any], replicate_id: str | None) -> tuple[InferenceRequest, str]:
@@ -1345,8 +1379,8 @@ class PairAdjudicationRunner:
 
     def export_results(self, replicate_ids: set[str | None]) -> list[dict[str, Any]]:
         rows = self.connection.execute(
-            "SELECT r.*,p.left_topic_key,p.right_topic_key,p.pair_json FROM pair_runs r "
-            "JOIN candidate_pairs p USING(pair_id) ORDER BY p.left_topic_key,p.right_topic_key,"
+            "SELECT r.*,p.left_topic_key,p.right_topic_key,p.pair_json,p.pair_kind FROM pair_runs r "
+            "JOIN pair_registry p USING(pair_id) ORDER BY p.left_topic_key,p.right_topic_key,"
             "COALESCE(r.replicate_id,''),r.cache_key"
         ).fetchall()
         results = []
@@ -1358,6 +1392,7 @@ class PairAdjudicationRunner:
             ).fetchone()[0]
             results.append({
                 "pair_id": row["pair_id"],
+                "pair_kind": row["pair_kind"],
                 "left_topic_key": row["left_topic_key"],
                 "right_topic_key": row["right_topic_key"],
                 "replicate_id": row["replicate_id"],
@@ -1370,14 +1405,15 @@ class PairAdjudicationRunner:
 
     def raw_attempts(self) -> list[dict[str, Any]]:
         rows = self.connection.execute(
-            "SELECT a.*,r.pair_id,r.replicate_id,p.left_topic_key,p.right_topic_key "
+            "SELECT a.*,r.pair_id,r.replicate_id,p.left_topic_key,p.right_topic_key,p.pair_kind "
             "FROM pair_attempts a JOIN pair_runs r USING(cache_key) "
-            "JOIN candidate_pairs p USING(pair_id) "
+            "JOIN pair_registry p USING(pair_id) "
             "ORDER BY p.left_topic_key,p.right_topic_key,COALESCE(r.replicate_id,''),a.attempt_no"
         ).fetchall()
         return [
             {
                 "pair_id": row["pair_id"],
+                "pair_kind": row["pair_kind"],
                 "cache_key": row["cache_key"],
                 "left_topic_key": row["left_topic_key"],
                 "right_topic_key": row["right_topic_key"],
