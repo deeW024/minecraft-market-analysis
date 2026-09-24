@@ -9,6 +9,9 @@ description = "Deterministic analytical feature layer for the BBB Market YEE-29 
 requires-python = ">=3.11"
 dependencies = ["typesafe-sdk==0.7.1"]
 
+[project.scripts]
+yee47-external-research = "market_analysis.external_research_cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
