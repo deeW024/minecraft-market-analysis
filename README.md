@@ -91,3 +91,18 @@ still validates the configured TypeSafe runtime and initializes the pinned
 SDK client, so it requires `JEV_TRANSPORT=typesafe` and `TYPESAFE_API_KEY` and
 is not a credential-free offline mode. Use the same input/output paths and
 persisted run state; production family finalization is a separate workflow.
+
+## YEE-54 evidence-gated opportunity synthesis
+
+YEE-54 consumes only the hash-pinned accepted YEE-46 shortlist/analysis DB and
+YEE-47 family packs, row-level evidence, competitors, queries, and research
+SQLite. It preserves upstream ranks/statuses, derives evidence inventories and
+gap tasks, and creates the fixed 41-family deep-validation queue plus exact
+15-family `COHORT_A`. It does not research markets, infer missing evidence,
+score, or recommend a product.
+
+Run `yee54-opportunity-synthesis` with the seven canonical input paths and a
+new or empty `--output-dir`; see `SYNTHESIS_SCHEMA.md` for fields, null
+semantics, and deterministic exports. The command checks all accepted hashes,
+opens canonical SQLite inputs read-only, verifies exported row mirrors, and
+performs a full byte-identical replay before reporting `PASS`.
