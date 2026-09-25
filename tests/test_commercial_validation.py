@@ -119,6 +119,17 @@ def _normalized(capture=None):
     return capture, validation._normalize_capture(capture, _canonical_rows(), inherited), inherited
 
 
+def _validate_fixture_payload(capture, payload):
+    output_checks = {
+        "row_counts_reconcile": True, "schemas_reconcile": True,
+        "sqlite_integrity_ok": True, "foreign_key_check_ok": True,
+    }
+    return validation._validate_payload(
+        payload, _canonical_rows(), output_checks,
+        validation.EXPECTED_HASHES, validation.EXPECTED_HASHES, True, capture,
+    )
+
+
 def test_exact_five_family_membership_and_every_upstream_field_is_preserved():
     _, payload, _ = _normalized()
     packs = payload["commercial_validation_packs"]
@@ -135,7 +146,7 @@ def test_identity_conflict_does_not_emit_product_specific_commercial_inferences(
         "validation_status": "IDENTITY_CONFLICT", "buyer_job_hypotheses": [],
         "pain_clusters": [], "alternatives": [], "differentiation_hypotheses": [],
         "paid_alternative_search_status": "NONE_LOCATED_IN_BOUNDED_SEARCH",
-        "feasibility_evidence_status": "NOT_ESTABLISHED", "feasibility_facts": [],
+        "feasibility_evidence_status": "PARTIAL", "feasibility_facts": [],
     })
     _, payload, _ = _normalized(capture)
     row = payload["commercial_validation_packs"][0]
@@ -173,8 +184,93 @@ def test_paid_price_status_requires_a_source_native_amount():
 def test_repeated_pain_sample_threshold_requires_three_distinct_observations_and_pages():
     capture = _fixture_capture()
     capture["families"][0]["pain_clusters"][0]["evidence_refs"] = ["f1-e3", "f1-e4"]
-    with pytest.raises(validation.CommercialValidationError, match="REPEATED_SAMPLE requires"):
+    with pytest.raises(validation.CommercialValidationError, match="same-theme observation evidence"):
         _normalized(capture)
+
+
+def test_family_pain_status_does_not_pool_distinct_themes():
+    capture = _fixture_capture()
+    family = capture["families"][0]
+    family["pain_clusters"] = [
+        {"pain_theme": "fixture theme one", "evidence_refs": ["f1-e3", "f1-e4"], "sample_status": "LIMITED_SAMPLE"},
+        {"pain_theme": "fixture theme two", "evidence_refs": ["f1-e5"], "sample_status": "LIMITED_SAMPLE"},
+    ]
+    family["pain_signal_summary"] = "Two themes have limited samples; observations are not pooled across themes."
+    _, payload, _ = _normalized(capture)
+    pack = payload["commercial_validation_packs"][0]
+    assert [row["sample_status"] for row in payload["pain_clusters"] if row["family_id"] == pack["family_id"]] == [
+        "LIMITED_SAMPLE", "LIMITED_SAMPLE",
+    ]
+    assert pack["dimension_statuses"]["pain_prevalence_sample"] == "LIMITED_SAMPLE"
+
+
+def test_sparse_bounded_search_results_pass_with_explicit_unknown_statuses():
+    capture = _fixture_capture()
+    family = capture["families"][0]
+    family["primary_user_role"] = "Unsupported user assertion"
+    family["buyer_or_payer_role"] = "Unsupported payer assertion"
+    family["buyer_job_hypotheses"] = []
+    family["pain_clusters"] = []
+    family["pain_signal_summary"] = "NOT_ESTABLISHED after required bounded searches; no defensible observations retained."
+    family["feasibility_facts"] = []
+    family["feasibility_evidence_status"] = "NOT_ESTABLISHED"
+    capture["evidence"] = [
+        row for row in capture["evidence"]
+        if row["capture_id"] not in {"f1-e1", "f1-e2", "f1-e3", "f1-e4", "f1-e5", "f1-e7", "f1-e8"}
+    ]
+    family["differentiation_hypotheses"] = []
+    _, payload, _ = _normalized(capture)
+    pack = payload["commercial_validation_packs"][0]
+    assert pack["primary_user_role"] == "UNKNOWN"
+    assert pack["buyer_or_payer_role"] == "UNKNOWN"
+    assert pack["dimension_statuses"]["buyer_job"] == "NOT_ESTABLISHED"
+    assert pack["dimension_statuses"]["pain_prevalence_sample"] == "NOT_ESTABLISHED"
+    assert pack["feasibility_evidence_status"] == "NOT_ESTABLISHED"
+    assert not pack["buyer_job_hypotheses"]
+    assert _validate_fixture_payload(capture, payload)["status"] == "PASS"
+
+
+@pytest.mark.parametrize("dimension,expected_status", [("buyer_job", "LIMITED_SAMPLE"), ("feasibility", "PARTIAL")])
+def test_one_retained_buyer_or_feasibility_item_is_valid(dimension, expected_status):
+    capture = _fixture_capture()
+    family = capture["families"][0]
+    if dimension == "buyer_job":
+        capture["evidence"] = [row for row in capture["evidence"] if row["capture_id"] != "f1-e2"]
+        family["buyer_job_hypotheses"] = family["buyer_job_hypotheses"][:1]
+    else:
+        capture["evidence"] = [row for row in capture["evidence"] if row["capture_id"] != "f1-e8"]
+        family["feasibility_facts"] = family["feasibility_facts"][:1]
+        family["feasibility_evidence_status"] = "PARTIAL"
+    _, payload, _ = _normalized(capture)
+    pack = payload["commercial_validation_packs"][0]
+    field = "buyer_job" if dimension == "buyer_job" else "feasibility"
+    value = pack["dimension_statuses"][field] if dimension == "buyer_job" else pack["feasibility_evidence_status"]
+    assert value == expected_status
+    assert _validate_fixture_payload(capture, payload)["status"] == "PASS"
+
+
+def test_hosting_starting_price_and_recommended_plan_are_distinct_evidence():
+    capture = _fixture_capture()
+    family = capture["families"][0]
+    family["alternatives"][0]["pricing_notes"] = "Advertised from $1.00/month; recommended 8 GB plan separately costs $2.00/month."
+    family["alternatives"][0]["evidence_refs"].append("f1-e9")
+    capture["opened_pages"].append({
+        "capture_id": "f1-p9", "family_id": validation.PILOT_IDS[0], "query_ref": "f1-q6",
+        "source_url": "https://example.org/hosting", "source_title": "Hosting plans",
+        "source_type": "MARKETPLACE_LISTING", "retrieved_at": "2026-09-25T09:00:00Z",
+    })
+    capture["evidence"].append({
+        "capture_id": "f1-e9", "family_id": validation.PILOT_IDS[0], "page_ref": "f1-p9",
+        "dimension": "paid_alternative", "claim_type": "PRICING", "numeric_value": 2.0,
+        "currency": "USD", "numeric_unit": "USD/month",
+        "observation": "A separately recommended 8 GB hosting plan costs $2.00/month.",
+    })
+    _, payload, _ = _normalized(capture)
+    alternative = payload["market_alternatives"][0]
+    evidence = {row["evidence_id"]: row for row in payload["validation_evidence"]}
+    assert alternative["price_amount"] == 1.0
+    assert "$2.00/month" in alternative["pricing_notes"]
+    assert len([eid for eid in alternative["evidence_ids"] if evidence[eid]["claim_type"] == "PRICING"]) == 2
 
 
 def test_not_established_differentiation_cell_is_not_rewritten_as_unsupported():
@@ -309,7 +405,7 @@ def test_read_only_canonical_input_hashes_remain_unchanged_and_build_finishes_on
     assert result["qa"]["checks"]["accepted_cohort_fields_preserved"] is True
     assert result["qa"]["checks"]["deterministic_replay_byte_identical"] is True
     assert result["qa"]["checks"]["all_deliverables_byte_identical_on_replay"] is True
-    assert result["qa"]["checks"]["research_budgets_and_evidence_minima_respected"] is True
+    assert result["qa"]["checks"]["bounded_query_and_page_gates_respected"] is True
     assert len(result["qa"]["details"]["family_checks"]) == 5
     assert result["qa"]["details"]["opened_page_count_by_family"][validation.PILOT_IDS[0]] == 8
     assert result["qa"]["details"]["row_counts"]["commercial_validation_packs"] == 5

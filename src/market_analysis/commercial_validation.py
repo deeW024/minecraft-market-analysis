@@ -337,14 +337,8 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
         source_row = families[family_id]
         evidence_ref_ids = [row["evidence_id"] for row in evidence_by_family[family_id]]
         dimensions = Counter(row["dimension"] for row in evidence_by_family[family_id])
-        if dimensions["buyer_job"] < 2:
-            raise CommercialValidationError(f"{family_id} needs at least two buyer/job evidence items when available")
-        if dimensions["pain_point"] < 3:
-            raise CommercialValidationError(f"{family_id} has fewer than three retained pain observations")
         if dimensions["pain_point"] > 10:
             raise CommercialValidationError(f"{family_id} exceeds the ten-observation pain evidence cap")
-        if dimensions["feasibility"] < 2:
-            raise CommercialValidationError(f"{family_id} has fewer than two feasibility evidence items")
 
         for raw_cluster in raw_family.get("pain_clusters", []):
             ids = _resolve_refs(raw_cluster.get("evidence_refs", []), evidence_ids, family_id)
@@ -354,10 +348,8 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
             distinct_observations = {evidence_by_id[eid]["observation"].strip() for eid in ids}
             expected_sample = "REPEATED_SAMPLE" if len(distinct_observations) >= 3 and len(pages) >= 2 else "LIMITED_SAMPLE"
             requested_sample = raw_cluster.get("sample_status", expected_sample)
-            if requested_sample == "REPEATED_SAMPLE" and expected_sample != "REPEATED_SAMPLE":
-                raise CommercialValidationError("REPEATED_SAMPLE requires >=3 distinct observations across >=2 pages/threads")
-            if requested_sample not in SAMPLE_STATUSES:
-                raise CommercialValidationError("invalid pain cluster sample status")
+            if requested_sample not in SAMPLE_STATUSES or requested_sample != expected_sample:
+                raise CommercialValidationError("pain cluster sample status must match its same-theme observation evidence")
             row = {
                 "cluster_id": _stable_id("pain55", family_id, raw_cluster.get("pain_theme", "")),
                 "family_id": family_id, "deep_validation_order": order,
@@ -434,8 +426,6 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
         validation_status = raw_family.get("validation_status", "COMPLETE_WITH_UNKNOWNS")
         if validation_status == "IDENTITY_CONFLICT":
             buyer_hypotheses = []
-        elif not buyer_hypotheses:
-            raise CommercialValidationError(f"{family_id} has no buyer/job hypothesis")
 
         feasibility_facts = []
         for fact in raw_family.get("feasibility_facts", []):
@@ -443,23 +433,44 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
             if not fact.get("fact") or not ids:
                 raise CommercialValidationError("feasibility facts require source evidence")
             feasibility_facts.append({"fact": fact["fact"], "evidence_ids": ids})
-        feasibility_status = raw_family.get("feasibility_evidence_status")
-        if feasibility_status not in FEASIBILITY_STATUSES:
+        requested_feasibility_status = raw_family.get("feasibility_evidence_status")
+        if requested_feasibility_status is not None and requested_feasibility_status not in FEASIBILITY_STATUSES:
             raise CommercialValidationError("invalid feasibility evidence status")
-        if feasibility_status == "COMPLETE" and not {"platform", "dependency_integration", "implementation_source"}.issubset(
-                {item.get("kind") for item in raw_family.get("feasibility_facts", [])}):
+        feasibility_kinds = {item.get("kind") for item in raw_family.get("feasibility_facts", [])}
+        implementation_facts = [item["fact"].casefold() for item in raw_family.get("feasibility_facts", [])
+                                if item.get("kind") == "implementation_source"]
+        source_absence_phrases = ("no public", "not established", "not found", "not available", "proprietary")
+        implementation_source_established = any(
+            not any(phrase in fact for phrase in source_absence_phrases) for fact in implementation_facts
+        )
+        complete_feasibility = (
+            {"platform", "dependency_integration", "implementation_source"}.issubset(feasibility_kinds)
+            and implementation_source_established
+        )
+        if complete_feasibility:
+            feasibility_status = "COMPLETE"
+        elif dimensions["feasibility"]:
+            feasibility_status = "PARTIAL"
+        else:
+            feasibility_status = "NOT_ESTABLISHED"
+        if requested_feasibility_status == "COMPLETE" and not complete_feasibility:
             raise CommercialValidationError("COMPLETE feasibility requires platform, dependency/integration and implementation/source facts")
+        if requested_feasibility_status is not None and requested_feasibility_status != feasibility_status:
+            raise CommercialValidationError("feasibility status must match retained technical evidence")
 
         family_queries = queries_by_family[family_id]
         buyer_evidence = dimensions["buyer_job"]
-        pain_ids = [row["evidence_id"] for row in evidence_by_family[family_id] if row["dimension"] == "pain_point"]
-        pain_pages = {evidence_by_id[eid]["canonical_url"] for eid in pain_ids}
-        pain_status = "REPEATED_SAMPLE" if len(pain_ids) >= 3 and len(pain_pages) >= 2 else ("LIMITED_SAMPLE" if pain_ids else "NOT_ESTABLISHED")
+        family_pain_clusters = pain_by_family[family_id]
+        pain_status = (
+            "REPEATED_SAMPLE" if any(row["sample_status"] == "REPEATED_SAMPLE" for row in family_pain_clusters)
+            else "LIMITED_SAMPLE" if family_pain_clusters
+            else "NOT_ESTABLISHED"
+        )
         paid_found = any(row["monetization_status"] in {"PAID_PRICE_VERIFIED", "FREEMIUM_PRICE_VERIFIED", "MONETIZED_PRICE_NOT_VISIBLE"}
                          for row in alternatives_by_family[family_id])
         paid_status = "ALTERNATIVES_LOCATED" if paid_found else "NONE_LOCATED_IN_BOUNDED_SEARCH"
         dimension_statuses = {
-            "buyer_job": "EVIDENCED" if buyer_evidence >= 2 else "LIMITED_SAMPLE",
+            "buyer_job": "EVIDENCED" if buyer_evidence >= 2 else "LIMITED_SAMPLE" if buyer_evidence == 1 else "NOT_ESTABLISHED",
             "pain_prevalence_sample": pain_status,
             "paid_alternatives": paid_status,
             "differentiation": "CANDIDATE_HYPOTHESES_WITH_EVIDENCE" if diff_by_family[family_id] else "NOT_ESTABLISHED",
@@ -478,10 +489,15 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
             raise CommercialValidationError(f"paid alternative search status disagrees with retained alternatives for {family_id}")
 
         pack = dict(source_row)
+        primary_user_role = raw_family.get("primary_user_role") or "UNKNOWN"
+        buyer_or_payer_role = raw_family.get("buyer_or_payer_role") or "UNKNOWN"
+        if buyer_evidence == 0:
+            primary_user_role = "UNKNOWN"
+            buyer_or_payer_role = "UNKNOWN"
         pack.update({
             "validation_status": validation_status,
-            "primary_user_role": raw_family.get("primary_user_role"),
-            "buyer_or_payer_role": raw_family.get("buyer_or_payer_role", "UNKNOWN"),
+            "primary_user_role": primary_user_role,
+            "buyer_or_payer_role": buyer_or_payer_role,
             "buyer_job_hypotheses": buyer_hypotheses,
             "pain_clusters": [{"cluster_id": row["cluster_id"], "pain_theme": row["pain_theme"],
                                "sample_status": row["sample_status"], "observation_count": row["observation_count"],
@@ -630,6 +646,8 @@ def _render_schema(payload: Mapping[str, Sequence[Mapping[str, Any]]], hashes: M
         "- Missing price is never interpreted as free. Monetization is one of `PAID_PRICE_VERIFIED`, `FREEMIUM_PRICE_VERIFIED`, `MONETIZED_PRICE_NOT_VISIBLE`, `FREE_VERIFIED`, or `UNKNOWN`.",
         "- Prices, currencies, billing units, ranges, and source wording remain native; no currency conversion is performed.",
         "- `REPEATED_SAMPLE` requires at least three distinct observations across at least two pages/threads. It describes only this bounded sample, not market prevalence.",
+        "- Required bounded query attempts are QA gates; retained-evidence row counts are not. Zero buyer/job or pain evidence maps to `NOT_ESTABLISHED`, one buyer/job item maps to `LIMITED_SAMPLE`, and zero/partial feasibility evidence maps to `NOT_ESTABLISHED`/`PARTIAL`.",
+        "- Pain cluster status is derived within each theme. Family `pain_prevalence_sample` is `REPEATED_SAMPLE` only when an individual cluster is repeated; otherwise it is `LIMITED_SAMPLE` when clusters exist, or `NOT_ESTABLISHED` when none do. Themes are never pooled.",
         "- Differentiation cells use `EVIDENCED_PRESENT`, `EXPLICITLY_UNSUPPORTED`, `NOT_ESTABLISHED`, or `NOT_APPLICABLE`; absent documentation alone never means unsupported.",
         "- `COMPLETE` feasibility requires evidenced platform, dependency/integration, and implementation/source; otherwise the status remains `PARTIAL` or `NOT_ESTABLISHED`.",
         "- Every new evidence record identifies an opened public source page and its discovery query. Inherited YEE-47 evidence IDs are references only and are not copied into YEE-55 evidence.",
@@ -747,8 +765,21 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
                 ("buyer/job validation", 1), ("pain prevalence discovery", 3),
                 ("paid alternatives/pricing", 3), ("feasibility support", 1))):
             errors.append(f"query-purpose minimum not met for {family_id}")
-        if not (dimensions["buyer_job"] >= 2 and 3 <= dimensions["pain_point"] <= 10 and dimensions["feasibility"] >= 2):
-            errors.append(f"buyer, pain, or feasibility evidence minimum/cap failed for {family_id}")
+        if dimensions["pain_point"] > 10:
+            errors.append(f"pain evidence cap exceeded for {family_id}")
+        expected_buyer_status = "EVIDENCED" if dimensions["buyer_job"] >= 2 else "LIMITED_SAMPLE" if dimensions["buyer_job"] == 1 else "NOT_ESTABLISHED"
+        family_clusters = [row for row in payload["pain_clusters"] if row["family_id"] == family_id]
+        expected_pain_status = (
+            "REPEATED_SAMPLE" if any(row["sample_status"] == "REPEATED_SAMPLE" for row in family_clusters)
+            else "LIMITED_SAMPLE" if family_clusters
+            else "NOT_ESTABLISHED"
+        )
+        if pack["dimension_statuses"]["buyer_job"] != expected_buyer_status:
+            errors.append(f"buyer/job dimension status does not match retained evidence for {family_id}")
+        if pack["dimension_statuses"]["pain_prevalence_sample"] != expected_pain_status:
+            errors.append(f"family pain status does not match cluster statuses for {family_id}")
+        if dimensions["buyer_job"] == 0 and (pack["primary_user_role"] != "UNKNOWN" or pack["buyer_or_payer_role"] != "UNKNOWN"):
+            errors.append(f"unsupported user/payer roles must remain UNKNOWN for {family_id}")
         family_checks.append({
             "deep_validation_order": pack["deep_validation_order"],
             "consensus_rank": pack["consensus_rank"],
@@ -758,7 +789,10 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
             "primary_user_role": pack["primary_user_role"],
             "buyer_or_payer_role": pack["buyer_or_payer_role"],
             "buyer_job_evidence_count": dimensions["buyer_job"],
+            "buyer_job_status": pack["dimension_statuses"]["buyer_job"],
             "pain_observation_count": dimensions["pain_point"],
+            "pain_status": pack["dimension_statuses"]["pain_prevalence_sample"],
+            "pain_signal_summary": pack["pain_signal_summary"],
             "distinct_pain_source_pages": len({row["canonical_url"] for row in own_rows if row["dimension"] == "pain_point"}),
             "query_count": len(family_queries),
             "query_purpose_counts": dict(sorted(purpose_counts.items())),
@@ -793,7 +827,8 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
             "accepted_cohort_fields_preserved": all({key: pack.get(key) for key in source} == dict(source) for source, pack in zip(canonical_rows, packs)),
             "no_orphan_or_cross_family_evidence_refs": not any("orphan" in item for item in errors),
             "query_references_valid": not invalid_query_refs,
-            "research_budgets_and_evidence_minima_respected": not any("budget" in item or "minimum" in item or "cap failed" in item for item in errors),
+            "bounded_query_and_page_gates_respected": not any("budget" in item or "query-purpose minimum" in item for item in errors),
+            "dimension_statuses_match_retained_evidence": not any("dimension status" in item or "pain status" in item or "roles must remain" in item for item in errors),
             "sqlite_integrity_ok": output_checks.get("sqlite_integrity_ok"),
             "foreign_key_check_ok": output_checks.get("foreign_key_check_ok"),
             "jsonl_csv_sqlite_reconciled": output_checks.get("row_counts_reconcile") and output_checks.get("schemas_reconcile") and all(value for key, value in output_checks.items() if key.endswith("_reconcile")),
@@ -813,6 +848,19 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
             "pain_sample_status_by_family": {row["family_id"]: row["dimension_statuses"]["pain_prevalence_sample"] for row in packs},
             "feasibility_status_counts": dict(Counter(row["feasibility_evidence_status"] for row in packs)),
             "monetization_status_counts": dict(Counter(row["monetization_status"] for row in payload["market_alternatives"])),
+            "alternative_pricing_context": [
+                {
+                    "family_id": row["family_id"],
+                    "canonical_topic_key": next((pack.get("canonical_topic_key") for pack in packs if pack["family_id"] == row["family_id"]), None),
+                    "entity_name": row["entity_name"],
+                    "relation_type": row["relation_type"],
+                    "monetization_status": row["monetization_status"],
+                    "price_amount": row["price_amount"],
+                    "price_min": row["price_min"], "price_max": row["price_max"],
+                    "currency": row["currency"], "price_unit": row["price_unit"],
+                    "pricing_notes": row["pricing_notes"],
+                } for row in payload["market_alternatives"]
+            ],
             "output_checks": dict(output_checks),
         },
     }
@@ -821,16 +869,28 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
 def _report(qa: Mapping[str, Any]) -> str:
     details = qa["details"]
     family_lines = [
-        "| Order | Rank | Family | Status | User / payer | Buyer evidence | Pain observations/pages | Queries / opened pages | Alternatives | Feasibility |",
-        "|---:|---:|---|---|---|---:|---:|---:|---:|---|",
+        "| Order | Rank | Family | Status | User / payer | Buyer evidence | Pain status | Pain summary | Queries / opened pages | Alternatives | Feasibility |",
+        "|---:|---:|---|---|---|---:|---|---|---:|---:|---|",
     ]
     for row in details["family_checks"]:
         family_lines.append(
             f"| {row['deep_validation_order']} | {row['consensus_rank']} | `{row['canonical_topic_key']}` | "
             f"{row['validation_status']} | {row['primary_user_role']} / {row['buyer_or_payer_role']} | "
-            f"{row['buyer_job_evidence_count']} | {row['pain_observation_count']} / {row['distinct_pain_source_pages']} | "
+            f"{row['buyer_job_evidence_count']} | {row['pain_status']} | {row['pain_signal_summary']} | "
             f"{row['query_count']} / {row['opened_page_count']} | {row['retained_alternative_count']} | "
             f"{row['feasibility_status']} ({row['feasibility_evidence_count']} evidence) |"
+        )
+    pricing_lines = []
+    for row in details["alternative_pricing_context"]:
+        if row["price_min"] is not None:
+            price_text = f"{row['price_min']}–{row['price_max']} {row['currency'] or ''} {row['price_unit'] or ''}".strip()
+        elif row["price_amount"] is not None:
+            price_text = f"{row['price_amount']} {row['currency'] or ''} {row['price_unit'] or ''}".strip()
+        else:
+            price_text = "not established"
+        pricing_lines.append(
+            f"| `{row['canonical_topic_key']}` | {row['entity_name']} | {row['relation_type']} | "
+            f"{row['monetization_status']} | {price_text} | {row['pricing_notes'] or ''} |"
         )
     return "\n".join([
         "# YEE-55 Deep Commercial Validation Pilot", "",
@@ -846,13 +906,19 @@ def _report(qa: Mapping[str, Any]) -> str:
         f"- Pain sample labels: `{_canonical_json(details['pain_sample_status_by_family'])}`",
         f"- Monetization states (source-native; no currency conversion): `{_canonical_json(details['monetization_status_counts'])}`",
         "", "## Family coverage", "", *family_lines,
+        "", "## Source-native alternative pricing", "",
+        "Prices below retain the source's currency and billing unit; hosting offers are not treated as modpack license prices.", "",
+        "| Family | Alternative | Relation | Monetization | Price as stated | Notes |",
+        "|---|---|---|---|---|---|",
+        *pricing_lines,
         "", "## Interpretation limits", "",
         "Community and support observations are individual public reports and are labeled as a bounded sample, not population prevalence. A candidate differentiation hypothesis is not proof of adoption or market advantage. Unknown prices are not treated as free. No revenue/TAM, market score, ranking, or product recommendation is produced.",
         "", "## QA", "",
         f"- SQLite integrity/FK: `{details['output_checks']['sqlite_integrity_ok']}` / `{details['output_checks']['foreign_key_check_ok']}`",
         f"- JSONL/CSV/SQLite reconciliation: `{details['output_checks']['row_counts_reconcile'] and details['output_checks']['schemas_reconcile']}`",
         f"- Deterministic replay: `{qa['checks']['deterministic_replay_byte_identical']}`",
-        f"- Query/page budgets and evidence minimums: `{qa['checks']['research_budgets_and_evidence_minima_respected']}`",
+        f"- Bounded query/page gates (not retained-evidence quotas): `{qa['checks']['bounded_query_and_page_gates_respected']}`",
+        f"- Dimension statuses match retained evidence: `{qa['checks']['dimension_statuses_match_retained_evidence']}`",
         f"- Query-to-evidence references: `{qa['checks']['query_references_valid']}`",
         f"- Canonical input hash stable: `{qa['checks']['canonical_inputs_read_only_hash_stable']}`",
         "", "## Canonical inputs", "",
