@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import re
+import shutil
 import sqlite3
 import tempfile
 from collections import Counter, defaultdict
@@ -22,14 +23,26 @@ EXPECTED_HASHES = {
     "opportunity_synthesis_db": "7fc256ee1c4649e56c274f39e2a321538758dff780d5ae196b277c67747fedd6",
     "yee47_external_research_db": "cce8b15c06b15a1094864ddd40653b9af7b185414a1207c25663f0f5dd55810f",
 }
-PILOT_FAMILIES = (
+COHORT_FAMILIES = (
     (1, 1, "family_188439fdf256290b518101b998fcc1796fec6d84387beed586a81728b8978a4b"),
     (3, 2, "family_39b0610ee5b1f2bb0e371ad55075469dd18d86f57809972bcb967c45ecb26b48"),
     (4, 3, "family_a6ba31d88da34303daa3d4011e228f234a99de9f80cc40c4bcbe5554dcf99e6f"),
     (7, 4, "family_fde65554a094d6f5bf491eb9779a0adceeaeee8ca61501aab4b5475c2810486f"),
     (8, 5, "family_183dadbeb21f00e17773add50166a0c2b2257a1d884e5aef6c552d04c02ab8ca"),
+    (9, 6, "family_bc76fab4be944ac77279467019f68a867a098e4e3e103c03923eb9b696feb2e2"),
+    (16, 7, "family_ce0e6e4f9c5b6ccb4ef67c6cf5746f21da556964e42b728b1124062308d6b97d"),
+    (18, 8, "family_4ee8c5fddfc6cc08a46896ea08a16dd37eb761bb8b1e3cfb1a372cc8626f7bbd"),
+    (19, 9, "family_42334c87a08bfea44d3e85656f6c7d7207b8f6387d64e6b5ef785bffe462a225"),
+    (22, 10, "family_5b2c3dcea44a1b2f4fb0c1ae18d852891697a75013cea635af641a50d68e6494"),
+    (27, 11, "family_1c0be9a2f6b4080b46558f694b3e5e5fbca9b2421f159aefbfb1f92292c39640"),
+    (28, 12, "family_d64072385be17f6b8192820a65378eca726a45e79a43dd5be51a3bbde6081320"),
+    (31, 13, "family_e99126a053f1abe74732e520bc2a41853b4ac7f545f59ae21d3500649c0bb720"),
+    (32, 14, "family_42eac8a8e6150cfafd2439e77b5869cd6760faa762423cc6d3311a4a92949c58"),
+    (34, 15, "family_e94a44e77ce21db0f6238ac989a601430775e2ba33c1c6ca55fd1c467f710acd"),
 )
+PILOT_FAMILIES = COHORT_FAMILIES[:5]
 PILOT_IDS = tuple(item[2] for item in PILOT_FAMILIES)
+COHORT_IDS = tuple(item[2] for item in COHORT_FAMILIES)
 QUERY_PURPOSES = {
     "buyer/job validation", "pain prevalence discovery", "paid alternatives/pricing", "feasibility support",
 }
@@ -143,7 +156,8 @@ def _readonly_connection(path: Path) -> sqlite3.Connection:
     return connection
 
 
-def _load_canonical_inputs(cohort_path: Path, synthesis_db_path: Path, yee47_db_path: Path):
+def _load_canonical_inputs(cohort_path: Path, synthesis_db_path: Path, yee47_db_path: Path,
+                           family_spec: Sequence[tuple[int, int, str]] = PILOT_FAMILIES):
     paths = {
         "next_validation_cohort": cohort_path.resolve(),
         "opportunity_synthesis_db": synthesis_db_path.resolve(),
@@ -160,10 +174,10 @@ def _load_canonical_inputs(cohort_path: Path, synthesis_db_path: Path, yee47_db_
     if any(row.get("validation_cohort") != "COHORT_A" for row in cohort):
         raise CommercialValidationError("accepted YEE-54 input contains a non-COHORT_A row")
     by_order = {row["deep_validation_order"]: row for row in cohort}
-    for rank, order, family_id in PILOT_FAMILIES:
+    for rank, order, family_id in family_spec:
         row = by_order.get(order)
         if not row or row.get("family_id") != family_id or row.get("consensus_rank") != rank:
-            raise CommercialValidationError(f"authorized YEE-55 pilot identity mismatch at order {order}")
+            raise CommercialValidationError(f"authorized YEE-55 identity mismatch at order {order}")
 
     for key in ("opportunity_synthesis_db", "yee47_external_research_db"):
         connection = _readonly_connection(paths[key])
@@ -172,7 +186,7 @@ def _load_canonical_inputs(cohort_path: Path, synthesis_db_path: Path, yee47_db_
                 raise CommercialValidationError(f"canonical {key} failed SQLite integrity_check")
             if key == "yee47_external_research_db":
                 inherited = {}
-                for family_id in PILOT_IDS:
+                for _, _, family_id in family_spec:
                     inherited[family_id] = [row[0] for row in connection.execute(
                         "SELECT evidence_id FROM external_evidence WHERE family_id=? ORDER BY evidence_id", (family_id,)
                     )]
@@ -194,7 +208,7 @@ def _load_canonical_inputs(cohort_path: Path, synthesis_db_path: Path, yee47_db_
     after = {name: _sha256(path) for name, path in paths.items()}
     if before != after:
         raise CommercialValidationError("canonical YEE-54/YEE-47 inputs changed during read-only preflight")
-    return [by_order[order] for _, order, _ in PILOT_FAMILIES], inherited, paths, before
+    return [by_order[order] for _, order, _ in family_spec], inherited, paths, before
 
 
 def _resolve_refs(refs: Sequence[str], id_map: Mapping[str, str], family_id: str) -> list[str]:
@@ -211,8 +225,9 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
         raise CommercialValidationError(f"capture_version must equal {CAPTURE_VERSION}")
     families = {row["family_id"]: row for row in canonical_rows}
     family_capture = {row["family_id"]: row for row in capture.get("families", [])}
-    if len(capture.get("families", [])) != 5 or set(family_capture) != set(PILOT_IDS):
-        raise CommercialValidationError("capture family membership must equal the exact authorized 5-family pilot")
+    expected_ids = tuple(row["family_id"] for row in canonical_rows)
+    if len(capture.get("families", [])) != len(expected_ids) or set(family_capture) != set(expected_ids):
+        raise CommercialValidationError("capture family membership must equal the exact authorized family set")
 
     query_ids: dict[str, str] = {}
     query_rows: list[dict[str, Any]] = []
@@ -243,7 +258,7 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
         query_rows.append(query)
         query_by_id[raw["capture_id"]] = query
         queries_by_family[family_id].append(query)
-    for family_id in PILOT_IDS:
+    for family_id in expected_ids:
         family_queries = sorted(queries_by_family[family_id], key=lambda row: row["query_sequence"])
         if [row["query_sequence"] for row in family_queries] != list(range(1, len(family_queries) + 1)):
             raise CommercialValidationError(f"query sequence is not contiguous for {family_id}")
@@ -284,7 +299,7 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
             page["published_or_updated_at"] = str(page["published_or_updated_at"])
         pages_by_ref[page_id] = page
         page_count_by_family[family_id] += 1
-    if any(page_count_by_family[family_id] > 25 for family_id in PILOT_IDS):
+    if any(page_count_by_family[family_id] > 25 for family_id in expected_ids):
         raise CommercialValidationError("retained opened-page budget exceeds 25 for a family")
 
     evidence_rows: list[dict[str, Any]] = []
@@ -332,9 +347,10 @@ def _normalize_capture(capture: Mapping[str, Any], canonical_rows: Sequence[Mapp
     diff_by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
     pain_by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
-    for rank, order, family_id in PILOT_FAMILIES:
+    for source_row in canonical_rows:
+        family_id = source_row["family_id"]
+        order = source_row["deep_validation_order"]
         raw_family = family_capture[family_id]
-        source_row = families[family_id]
         evidence_ref_ids = [row["evidence_id"] for row in evidence_by_family[family_id]]
         dimensions = Counter(row["dimension"] for row in evidence_by_family[family_id])
         if dimensions["pain_point"] > 10:
@@ -621,11 +637,12 @@ def _write_db(path: Path, payload: Mapping[str, Sequence[Mapping[str, Any]]], me
     connection.close()
 
 
-def _render_schema(payload: Mapping[str, Sequence[Mapping[str, Any]]], hashes: Mapping[str, str]) -> str:
+def _render_schema(payload: Mapping[str, Sequence[Mapping[str, Any]]], hashes: Mapping[str, str], stage: str = "PILOT") -> str:
     cols = _table_columns(payload)
+    scope = "orders 1..5" if stage == "PILOT" else "orders 1..15"
     lines = [
         "# YEE-55 Commercial Validation Schema v0.1", "",
-        "Bounded pilot: COHORT_A deep_validation_order 1..5 only. This layer records sampled public evidence and hypotheses; it does not estimate population prevalence, revenue, TAM, or opportunity ranking.",
+        f"Bounded public-evidence dataset: COHORT_A deep_validation_order {scope}. This layer records sampled evidence and hypotheses; it does not estimate population prevalence, revenue, TAM, or opportunity ranking.",
         "", "## Canonical inputs", "",
     ]
     lines += [f"- `{key}` SHA-256: `{value}` (read-only)" for key, value in sorted(hashes.items())]
@@ -656,7 +673,7 @@ def _render_schema(payload: Mapping[str, Sequence[Mapping[str, Any]]], hashes: M
     return "\n".join(lines) + "\n"
 
 
-def _write_core(output: Path, payload: Mapping[str, Sequence[Mapping[str, Any]]], capture: Mapping[str, Any], hashes: Mapping[str, str]) -> list[Path]:
+def _write_core(output: Path, payload: Mapping[str, Sequence[Mapping[str, Any]]], capture: Mapping[str, Any], hashes: Mapping[str, str], stage: str = "PILOT") -> list[Path]:
     output.mkdir(parents=True, exist_ok=True)
     columns = _table_columns(payload)
     paths: list[Path] = []
@@ -670,10 +687,10 @@ def _write_core(output: Path, payload: Mapping[str, Sequence[Mapping[str, Any]]]
     _write_db(db_path, payload, {
         "work_order": WORK_ORDER, "schema_version": SCHEMA_VERSION,
         "capture_version": CAPTURE_VERSION, "canonical_input_hashes": dict(hashes),
-        "authorization": "PILOT_DEEP_VALIDATION_ORDER_1_TO_5",
+        "authorization": "PILOT_DEEP_VALIDATION_ORDER_1_TO_5" if stage == "PILOT" else "FULL_COHORT_A_DEEP_VALIDATION_ORDER_1_TO_15",
     })
     schema_path = output / "COMMERCIAL_VALIDATION_SCHEMA.md"
-    schema_path.write_text(_render_schema(payload, hashes), encoding="utf-8", newline="\n")
+    schema_path.write_text(_render_schema(payload, hashes, stage), encoding="utf-8", newline="\n")
     capture_path = output / "VALIDATION_CAPTURE.json"
     capture_path.write_text(_canonical_json(capture) + "\n", encoding="utf-8", newline="\n")
     paths += [db_path, schema_path, capture_path]
@@ -720,13 +737,13 @@ def _check_outputs(output: Path, payload: Mapping[str, Sequence[Mapping[str, Any
     return checks
 
 
-def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canonical_rows: Sequence[Mapping[str, Any]], output_checks: Mapping[str, Any], hashes_before: Mapping[str, str], hashes_after: Mapping[str, str], deterministic: bool, capture: Mapping[str, Any]) -> dict[str, Any]:
+def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canonical_rows: Sequence[Mapping[str, Any]], output_checks: Mapping[str, Any], hashes_before: Mapping[str, str], hashes_after: Mapping[str, str], deterministic: bool, capture: Mapping[str, Any], stage: str = "PILOT", pilot_preserved: bool = True) -> dict[str, Any]:
     packs = payload["commercial_validation_packs"]
     errors: list[str] = []
-    expected = list(PILOT_IDS)
+    expected = [row["family_id"] for row in canonical_rows]
     got = [row["family_id"] for row in packs]
-    if len(packs) != 5 or got != expected:
-        errors.append("exact pilot membership/order is not the authorized five families")
+    if len(packs) != len(expected) or got != expected:
+        errors.append("exact authorized family membership/order does not reconcile")
     query_rows = payload["validation_queries"]
     query_ids = {row["query_id"] for row in query_rows}
     evidence_rows = payload["validation_evidence"]
@@ -804,7 +821,7 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
         })
     for table in ("pain_clusters", "market_alternatives", "differentiation_hypotheses"):
         for row in payload[table]:
-            if row["family_id"] not in PILOT_IDS or not set(row["evidence_ids"]).issubset(
+            if row["family_id"] not in expected or not set(row["evidence_ids"]).issubset(
                     {eid for eid, ev in evidence_by_id.items() if ev["family_id"] == row["family_id"]}):
                 errors.append(f"orphan or cross-family reference in {table}")
     for table_check, passed in output_checks.items():
@@ -815,15 +832,20 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
         errors.append("deterministic replay is not byte-identical")
     if dict(hashes_before) != dict(hashes_after) or dict(hashes_before) != EXPECTED_HASHES:
         errors.append("canonical input hashes changed or do not match accepted inputs")
+    if stage == "FULL" and not pilot_preserved:
+        errors.append("accepted pilot orders 1..5 changed in the full dataset")
     return {
         "status": "PASS" if not errors else "FAIL",
         "work_order": WORK_ORDER, "schema_version": SCHEMA_VERSION,
-        "authorized_scope": "pilot deep_validation_order 1..5 only",
+        "authorized_scope": "deep_validation_order 1..5 only" if stage == "PILOT" else "COHORT_A deep_validation_order 1..15; pilot orders 1..5 preserved",
         "errors": errors,
         "canonical_input_hashes_before": dict(hashes_before),
         "canonical_input_hashes_after": dict(hashes_after),
         "checks": {
-            "exactly_five_authorized_families": len(packs) == 5 and got == expected,
+            "exactly_five_authorized_families": (len(packs) == 5 and got == expected) if stage == "PILOT" else None,
+            "exactly_fifteen_authorized_families": (len(packs) == 15 and got == expected) if stage == "FULL" else None,
+            "exact_authorized_family_set_and_order": len(packs) == len(expected) and got == expected,
+            "accepted_pilot_orders_1_to_5_unchanged": pilot_preserved if stage == "FULL" else True,
             "accepted_cohort_fields_preserved": all({key: pack.get(key) for key in source} == dict(source) for source, pack in zip(canonical_rows, packs)),
             "no_orphan_or_cross_family_evidence_refs": not any("orphan" in item for item in errors),
             "query_references_valid": not invalid_query_refs,
@@ -866,7 +888,7 @@ def _validate_payload(payload: Mapping[str, Sequence[Mapping[str, Any]]], canoni
     }
 
 
-def _report(qa: Mapping[str, Any]) -> str:
+def _report(qa: Mapping[str, Any], stage: str = "PILOT") -> str:
     details = qa["details"]
     family_lines = [
         "| Order | Rank | Family | Status | User / payer | Buyer evidence | Pain status | Pain summary | Queries / opened pages | Alternatives | Feasibility |",
@@ -893,9 +915,9 @@ def _report(qa: Mapping[str, Any]) -> str:
             f"{row['monetization_status']} | {price_text} | {row['pricing_notes'] or ''} |"
         )
     return "\n".join([
-        "# YEE-55 Deep Commercial Validation Pilot", "",
+        "# YEE-55 Deep Commercial Validation Pilot" if stage == "PILOT" else "# YEE-55 Deep Commercial Validation Final Dataset", "",
         f"Status: **{qa['status']}**", "",
-        "Authorized scope is limited to deep_validation_order 1..5 (five families). Orders 6..15 were not researched or executed.", "",
+        "Authorized scope: deep_validation_order 1..5 (five accepted pilot families)." if stage == "PILOT" else "Authorized scope: all 15 COHORT_A families, deep_validation_order 1..15. Accepted orders 1..5 were preserved unchanged.", "",
         f"- Packs: {details['family_count']}",
         f"- Evidence: {details['row_counts']['validation_evidence']}",
         f"- Query log: {details['row_counts']['validation_queries']}",
@@ -921,32 +943,34 @@ def _report(qa: Mapping[str, Any]) -> str:
         f"- Dimension statuses match retained evidence: `{qa['checks']['dimension_statuses_match_retained_evidence']}`",
         f"- Query-to-evidence references: `{qa['checks']['query_references_valid']}`",
         f"- Canonical input hash stable: `{qa['checks']['canonical_inputs_read_only_hash_stable']}`",
+        *([f"- Accepted pilot orders 1..5 unchanged: `{qa['checks']['accepted_pilot_orders_1_to_5_unchanged']}`"] if stage == "FULL" else []),
         "", "## Canonical inputs", "",
         *[f"- `{key}`: `{value}`" for key, value in sorted(qa["canonical_input_hashes_before"].items())],
         "", "See `QA_RESULT.json`, `DATASET_MANIFEST.json`, and `VALIDATION_CAPTURE.json` for row-level reconciliation and source provenance.", "",
     ])
 
 
-def _write_final_docs(output: Path, qa: Mapping[str, Any]) -> None:
+def _write_final_docs(output: Path, qa: Mapping[str, Any], stage: str = "PILOT") -> None:
     (output / "QA_RESULT.json").write_text(_canonical_json(qa) + "\n", encoding="utf-8", newline="\n")
-    (output / "PILOT_REPORT.md").write_text(_report(qa), encoding="utf-8", newline="\n")
+    report_name = "PILOT_REPORT.md" if stage == "PILOT" else "FINAL_REPORT.md"
+    (output / report_name).write_text(_report(qa, stage), encoding="utf-8", newline="\n")
 
 
-def _manifest(output: Path, hashes: Mapping[str, str], counts: Mapping[str, int]) -> dict[str, Any]:
+def _manifest(output: Path, hashes: Mapping[str, str], counts: Mapping[str, int], stage: str = "PILOT") -> dict[str, Any]:
     files = []
     for path in sorted((item for item in output.iterdir() if item.is_file() and item.name != "DATASET_MANIFEST.json"), key=lambda item: item.name):
         files.append({"file": path.name, "size_bytes": path.stat().st_size, "sha256": _sha256(path)})
     return {
         "work_order": WORK_ORDER, "schema_version": SCHEMA_VERSION,
-        "authorization": "PILOT_DEEP_VALIDATION_ORDER_1_TO_5",
+        "authorization": "PILOT_DEEP_VALIDATION_ORDER_1_TO_5" if stage == "PILOT" else "FULL_COHORT_A_DEEP_VALIDATION_ORDER_1_TO_15",
         "canonical_input_hashes": dict(hashes), "row_counts": dict(counts),
         "files": files,
         "manifest_note": "Manifest enumerates all deliverables except itself to avoid recursive hashing.",
     }
 
 
-def _write_manifest(output: Path, hashes: Mapping[str, str], counts: Mapping[str, int]) -> None:
-    (output / "DATASET_MANIFEST.json").write_text(_canonical_json(_manifest(output, hashes, counts)) + "\n", encoding="utf-8", newline="\n")
+def _write_manifest(output: Path, hashes: Mapping[str, str], counts: Mapping[str, int], stage: str = "PILOT") -> None:
+    (output / "DATASET_MANIFEST.json").write_text(_canonical_json(_manifest(output, hashes, counts, stage)) + "\n", encoding="utf-8", newline="\n")
 
 
 def build_pilot(cohort_path: str | Path, synthesis_db_path: str | Path, yee47_db_path: str | Path,
@@ -1009,3 +1033,112 @@ def build_pilot(cohort_path: str | Path, synthesis_db_path: str | Path, yee47_db
         _write_final_docs(output, qa)
         _write_manifest(output, hashes_before, counts)
     return {"status": qa["status"], "output_dir": output, "qa": qa, "manifest": _manifest(output, hashes_before, counts)}
+
+
+def _merge_authorized_captures(pilot: Mapping[str, Any], additions: Mapping[str, Any], hashes: Mapping[str, str]) -> dict[str, Any]:
+    if pilot.get("capture_version") != CAPTURE_VERSION or additions.get("capture_version") != CAPTURE_VERSION:
+        raise CommercialValidationError("pilot and full-slice capture versions must match")
+    if pilot.get("canonical_input_hashes") != hashes or additions.get("canonical_input_hashes") != hashes:
+        raise CommercialValidationError("pilot/addition captures must reference the verified canonical input hashes")
+    pilot_ids = [row.get("family_id") for row in pilot.get("families", [])]
+    addition_ids = [row.get("family_id") for row in additions.get("families", [])]
+    expected_pilot = list(PILOT_IDS)
+    expected_additions = list(COHORT_IDS[5:])
+    if pilot_ids != expected_pilot:
+        raise CommercialValidationError("accepted pilot capture must retain the exact order-1..5 family sequence")
+    if addition_ids != expected_additions:
+        raise CommercialValidationError("full-slice additions must contain exactly deep_validation_order 6..15")
+    merged = {
+        "capture_version": CAPTURE_VERSION,
+        "canonical_input_hashes": dict(hashes),
+    }
+    if additions.get("research_timestamp_note"):
+        merged["research_timestamp_notes"] = {"deep_validation_order_6_to_15": additions["research_timestamp_note"]}
+    for key in ("families", "queries", "opened_pages", "evidence"):
+        merged[key] = list(pilot.get(key, [])) + list(additions.get(key, []))
+    return merged
+
+
+def _accepted_pilot_rows_unchanged(pilot_output: Path, payload: Mapping[str, Sequence[Mapping[str, Any]]]) -> bool:
+    for table, current_rows in payload.items():
+        accepted_path = pilot_output / f"{table}.jsonl"
+        if not accepted_path.is_file():
+            return False
+        accepted_rows = _read_jsonl(accepted_path)
+        family_ids = set(PILOT_IDS)
+        expected_rows = [row for row in current_rows if row.get("family_id") in family_ids]
+        prior_rows = [row for row in accepted_rows if row.get("family_id") in family_ids]
+        if prior_rows != expected_rows:
+            return False
+    return True
+
+
+def build_full(cohort_path: str | Path, synthesis_db_path: str | Path, yee47_db_path: str | Path,
+               pilot_capture_path: str | Path, additions_capture_path: str | Path,
+               accepted_pilot_dir: str | Path, output_dir: str | Path) -> dict[str, Any]:
+    canonical_rows, inherited, paths, hashes_before = _load_canonical_inputs(
+        Path(cohort_path), Path(synthesis_db_path), Path(yee47_db_path), COHORT_FAMILIES
+    )
+    accepted_pilot = Path(accepted_pilot_dir).resolve()
+    pilot_report = accepted_pilot / "PILOT_REPORT.md"
+    if not pilot_report.is_file():
+        raise CommercialValidationError("accepted pilot PILOT_REPORT.md is required and must remain unchanged")
+    try:
+        pilot_capture = json.loads(Path(pilot_capture_path).read_text(encoding="utf-8"))
+        additions = json.loads(Path(additions_capture_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CommercialValidationError("unable to read accepted pilot/full-slice capture inputs") from exc
+    capture = _merge_authorized_captures(pilot_capture, additions, hashes_before)
+    output = Path(output_dir).resolve()
+    if output.exists() and any(output.iterdir()):
+        raise CommercialValidationError(f"refusing to overwrite non-empty production output directory: {output}")
+    payload = _normalize_capture(capture, canonical_rows, inherited)
+    pilot_preserved = _accepted_pilot_rows_unchanged(accepted_pilot, payload)
+    artifact_paths = _write_core(output, payload, capture, hashes_before, "FULL")
+    output_checks = _check_outputs(output, payload)
+
+    with tempfile.TemporaryDirectory(prefix="yee55-full-replay-") as temp:
+        replay = Path(temp)
+        replay_payload = _normalize_capture(capture, canonical_rows, inherited)
+        replay_core = _write_core(replay, replay_payload, capture, hashes_before, "FULL")
+        shutil.copyfile(pilot_report, output / "PILOT_REPORT.md")
+        shutil.copyfile(pilot_report, replay / "PILOT_REPORT.md")
+        core_identical = (
+            payload == replay_payload
+            and {p.name: _sha256(p) for p in artifact_paths} == {p.name: _sha256(p) for p in replay_core}
+        )
+        replay_checks = _check_outputs(replay, replay_payload)
+        deterministic = core_identical and replay_checks == output_checks
+        hashes_after = {name: _sha256(path) for name, path in paths.items()}
+        qa = _validate_payload(payload, canonical_rows, output_checks, hashes_before, hashes_after,
+                               deterministic, capture, "FULL", pilot_preserved)
+        _write_final_docs(output, qa, "FULL")
+        _write_final_docs(replay, qa, "FULL")
+        counts = {table: len(rows) for table, rows in payload.items()}
+        _write_manifest(output, hashes_before, counts, "FULL")
+        _write_manifest(replay, hashes_before, counts, "FULL")
+        final_files = sorted(path.name for path in output.iterdir() if path.is_file())
+        replay_files = sorted(path.name for path in replay.iterdir() if path.is_file())
+        final_byte_identical = final_files == replay_files and all(
+            _sha256(output / name) == _sha256(replay / name) for name in final_files
+        )
+        qa["checks"]["all_deliverables_byte_identical_on_replay"] = final_byte_identical
+        if not final_byte_identical:
+            qa["status"] = "FAIL"
+            qa["errors"].append("final deliverables differ on deterministic replay")
+        _write_final_docs(output, qa, "FULL")
+        _write_final_docs(replay, qa, "FULL")
+        _write_manifest(output, hashes_before, counts, "FULL")
+        _write_manifest(replay, hashes_before, counts, "FULL")
+        final_byte_identical = final_files == sorted(path.name for path in replay.iterdir() if path.is_file()) and all(
+            _sha256(output / name) == _sha256(replay / name) for name in final_files
+        )
+        qa["checks"]["all_deliverables_byte_identical_on_replay"] = final_byte_identical
+        if not final_byte_identical:
+            qa["status"] = "FAIL"
+            if "final deliverables differ on deterministic replay" not in qa["errors"]:
+                qa["errors"].append("final deliverables differ on deterministic replay")
+        _write_final_docs(output, qa, "FULL")
+        _write_manifest(output, hashes_before, counts, "FULL")
+    return {"status": qa["status"], "output_dir": output, "qa": qa,
+            "manifest": _manifest(output, hashes_before, counts, "FULL")}

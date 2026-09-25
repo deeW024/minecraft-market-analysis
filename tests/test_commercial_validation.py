@@ -10,13 +10,14 @@ import pytest
 from market_analysis import commercial_validation as validation
 
 
-def _fixture_capture():
+def _fixture_capture(family_spec=None):
+    family_spec = family_spec or validation.PILOT_FAMILIES
     capture = {
         "capture_version": validation.CAPTURE_VERSION,
         "canonical_input_hashes": dict(validation.EXPECTED_HASHES),
         "queries": [], "opened_pages": [], "evidence": [], "families": [],
     }
-    for rank, order, family_id in validation.PILOT_FAMILIES:
+    for rank, order, family_id in family_spec:
         prefix = f"f{order}"
         purpose_list = [
             "buyer/job validation", "buyer/job validation",
@@ -102,9 +103,10 @@ def _fixture_capture():
     return capture
 
 
-def _canonical_rows():
+def _canonical_rows(family_spec=None):
+    family_spec = family_spec or validation.PILOT_FAMILIES
     rows = []
-    for rank, order, family_id in validation.PILOT_FAMILIES:
+    for rank, order, family_id in family_spec:
         rows.append({
             "family_id": family_id, "consensus_rank": rank, "deep_validation_order": order,
             "validation_cohort": "COHORT_A", "canonical_topic_key": f"topic-{rank}",
@@ -412,3 +414,64 @@ def test_read_only_canonical_input_hashes_remain_unchanged_and_build_finishes_on
     assert json.loads((output / "QA_RESULT.json").read_text(encoding="utf-8"))["status"] == "PASS"
     manifest = json.loads((output / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
     assert {entry["file"] for entry in manifest["files"]} >= {"deep_commercial_validation.sqlite", "PILOT_REPORT.md", "QA_RESULT.json"}
+
+
+def test_full_build_preserves_accepted_pilot_rows_and_adds_exact_15_family_cohort(tmp_path, monkeypatch):
+    cohort = tmp_path / "next_validation_cohort.jsonl"
+    synthesis = tmp_path / "opportunity_synthesis.sqlite"
+    yee47 = tmp_path / "external_market_research.sqlite"
+    pilot_capture_path = tmp_path / "pilot-capture.json"
+    additions_path = tmp_path / "full-additions.json"
+    pilot_output = tmp_path / "accepted-pilot"
+    full_output = tmp_path / "full-output"
+    rows = _canonical_rows(validation.COHORT_FAMILIES)
+    cohort.write_text("".join(validation._canonical_json(row) + "\n" for row in rows), encoding="utf-8")
+    with sqlite3.connect(synthesis) as connection:
+        connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)")
+        connection.execute("CREATE TABLE next_validation_cohort (family_id TEXT, consensus_rank INTEGER, deep_validation_order INTEGER, validation_cohort TEXT)")
+        connection.executemany("INSERT INTO next_validation_cohort VALUES (?,?,?,?)", [
+            (row["family_id"], row["consensus_rank"], row["deep_validation_order"], row["validation_cohort"])
+            for row in rows
+        ])
+    with sqlite3.connect(yee47) as connection:
+        connection.execute("CREATE TABLE external_evidence (evidence_id TEXT, family_id TEXT)")
+        connection.executemany("INSERT INTO external_evidence VALUES (?,?)", [
+            (f"inherited-{index}", row["family_id"]) for index, row in enumerate(rows, 1)
+        ])
+    actual_hashes = {
+        "next_validation_cohort": validation._sha256(cohort),
+        "opportunity_synthesis_db": validation._sha256(synthesis),
+        "yee47_external_research_db": validation._sha256(yee47),
+    }
+    monkeypatch.setattr(validation, "EXPECTED_HASHES", actual_hashes)
+    pilot_capture = _fixture_capture()
+    additions = _fixture_capture(validation.COHORT_FAMILIES[5:])
+    pilot_capture["canonical_input_hashes"] = actual_hashes
+    additions["canonical_input_hashes"] = actual_hashes
+    additions["research_timestamp_note"] = "Added-order search issue times are recorded to UTC minute-level batch precision."
+    pilot_capture_path.write_text(validation._canonical_json(pilot_capture), encoding="utf-8")
+    additions_path.write_text(validation._canonical_json(additions), encoding="utf-8")
+
+    pilot = validation.build_pilot(cohort, synthesis, yee47, pilot_capture_path, pilot_output)
+    accepted_pilot_report = (pilot_output / "PILOT_REPORT.md").read_bytes()
+    input_hashes_before = {path.name: validation._sha256(path) for path in (cohort, synthesis, yee47)}
+    result = validation.build_full(cohort, synthesis, yee47, pilot_capture_path, additions_path,
+                                   pilot_output, full_output)
+    input_hashes_after = {path.name: validation._sha256(path) for path in (cohort, synthesis, yee47)}
+
+    assert pilot["status"] == result["status"] == "PASS"
+    assert input_hashes_before == input_hashes_after
+    assert result["qa"]["checks"]["exactly_fifteen_authorized_families"] is True
+    assert result["qa"]["checks"]["exactly_five_authorized_families"] is None
+    assert result["qa"]["checks"]["accepted_pilot_orders_1_to_5_unchanged"] is True
+    assert result["qa"]["checks"]["deterministic_replay_byte_identical"] is True
+    assert result["qa"]["checks"]["all_deliverables_byte_identical_on_replay"] is True
+    assert result["qa"]["details"]["row_counts"]["commercial_validation_packs"] == 15
+    assert (full_output / "PILOT_REPORT.md").read_bytes() == accepted_pilot_report
+    assert (full_output / "FINAL_REPORT.md").is_file()
+    merged_capture = json.loads((full_output / "VALIDATION_CAPTURE.json").read_text(encoding="utf-8"))
+    assert merged_capture["research_timestamp_notes"]["deep_validation_order_6_to_15"] == additions["research_timestamp_note"]
+    manifest = json.loads((full_output / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
+    assert {entry["file"] for entry in manifest["files"]} >= {
+        "deep_commercial_validation.sqlite", "PILOT_REPORT.md", "FINAL_REPORT.md", "QA_RESULT.json",
+    }
