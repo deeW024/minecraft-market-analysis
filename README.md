@@ -106,3 +106,18 @@ new or empty `--output-dir`; see `SYNTHESIS_SCHEMA.md` for fields, null
 semantics, and deterministic exports. The command checks all accepted hashes,
 opens canonical SQLite inputs read-only, verifies exported row mirrors, and
 performs a full byte-identical replay before reporting `PASS`.
+
+## YEE-59 concept decision matrix
+
+YEE-59 consumes only the hash-pinned accepted YEE-57 concept cards/readiness/SQLite
+and the accepted YEE-55 alternatives JSONL/SQLite, all read-only. It preserves
+upstream fields and derives six separate ordinal evidence dimensions, then
+computes complete Pareto dominators without combining dimensions into a score.
+
+Run `yee59-decision-matrix` with `--yee57-input-dir`, `--yee55-input-dir`, and a
+new or empty `--output-dir`. The command verifies pinned input hashes and
+SQLite/JSONL reconciliation, creates JSONL/CSV/SQLite/schema/brief/QA/manifest
+artifacts, and requires byte-identical deterministic replay. See
+`DECISION_SCHEMA.md` for field semantics and null handling. A dominated
+evidence profile is not a rejection or quality judgment; the frontier is not a
+ranking or build recommendation.
