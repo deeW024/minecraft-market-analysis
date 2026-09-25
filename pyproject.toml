@@ -13,6 +13,7 @@ dependencies = ["typesafe-sdk==0.7.1"]
 yee47-external-research = "market_analysis.external_research_cli:main"
 yee54-opportunity-synthesis = "market_analysis.opportunity_synthesis_cli:main"
 yee55-commercial-validation = "market_analysis.commercial_validation_cli:main"
+yee57-concept-synthesis = "market_analysis.concept_synthesis_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
