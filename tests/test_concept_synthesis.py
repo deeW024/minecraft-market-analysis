@@ -5,10 +5,12 @@ import sqlite3
 
 import pytest
 
+import market_analysis.concept_synthesis as synthesis
 from market_analysis.concept_synthesis import (
     CAPTURE_VERSION,
     CONCEPT_COLUMNS,
     EXPECTED_READY_ORDERS,
+    FINAL_CONCEPT_ORDERS,
     PILOT_CONCEPT_ORDERS,
     READINESS_COLUMNS,
     ConceptSynthesisError,
@@ -21,6 +23,8 @@ from market_analysis.concept_synthesis import (
     _uncertainty_and_questions,
     commercial_signal_state,
     derive_readiness_matrix,
+    build_final,
+    build_pilot,
 )
 
 
@@ -127,9 +131,9 @@ def _fixture_payload():
     }
 
 
-def _capture(payload):
+def _capture(payload, authorized_orders=PILOT_CONCEPT_ORDERS):
     families = []
-    for order in PILOT_CONCEPT_ORDERS:
+    for order in authorized_orders:
         family_id = f"family-{order:02d}"
         families.append({
             "family_id": family_id,
@@ -241,6 +245,69 @@ def test_capture_rejects_unauthorized_order_eight_even_when_ready():
     capture["families"].append(extra)
     with pytest.raises(ConceptSynthesisError, match="exactly the five authorized"):
         _validate_capture(capture, payload, derive_readiness_matrix(payload))
+
+
+def test_final_capture_authorizes_only_exact_ready_orders_and_preserves_pilot_entries():
+    payload = _fixture_payload()
+    matrix = derive_readiness_matrix(payload)
+    pilot_capture = _capture(payload)
+    final_capture = _capture(payload, FINAL_CONCEPT_ORDERS)
+    assert final_capture["families"][:5] == pilot_capture["families"]
+
+    capture_rows = _validate_capture(final_capture, payload, matrix, FINAL_CONCEPT_ORDERS)
+    cards = _normalize_cards(payload, matrix, capture_rows, FINAL_CONCEPT_ORDERS)
+    assert [row["deep_validation_order"] for row in cards] == list(FINAL_CONCEPT_ORDERS)
+
+    unauthorized = dict(final_capture)
+    unauthorized["families"] = list(final_capture["families"])
+    extra = dict(final_capture["families"][0])
+    extra["family_id"] = "family-06"
+    unauthorized["families"].append(extra)
+    with pytest.raises(ConceptSynthesisError, match="exactly the eight authorized"):
+        _validate_capture(unauthorized, payload, matrix, FINAL_CONCEPT_ORDERS)
+
+
+def test_final_build_replay_keeps_accepted_pilot_bytes_and_adds_only_authorized_cards(tmp_path, monkeypatch):
+    payload = _fixture_payload()
+    input_dir = tmp_path / "accepted-input"
+    input_dir.mkdir()
+    for name in synthesis.INPUT_HASHES:
+        (input_dir / name).write_bytes(b"fixture-input")
+    hashes = {name: synthesis._sha256(input_dir / name) for name in synthesis.INPUT_HASHES}
+    checks = {
+        "pinned_hashes_match": True,
+        "input_sqlite_integrity_ok": True,
+        "input_sqlite_foreign_keys_ok": True,
+        "all_jsonl_exports_match_sqlite": True,
+        "canonical_input_hashes_stable": True,
+    }
+    monkeypatch.setattr(synthesis, "_load_inputs", lambda _path: (payload, hashes, checks))
+
+    pilot_dir = tmp_path / "accepted-pilot"
+    pilot_capture_path = tmp_path / "pilot-capture.json"
+    pilot_capture_path.write_text(synthesis.canonical_json(_capture(payload)) + "\n", encoding="utf-8")
+    pilot_qa = build_pilot(input_dir, pilot_capture_path, pilot_dir)
+    accepted_pilot_bytes = {
+        name: (pilot_dir / name).read_bytes()
+        for name in synthesis.OUTPUT_FILES
+    }
+
+    final_capture_path = tmp_path / "final-capture.json"
+    final_capture_path.write_text(
+        synthesis.canonical_json(_capture(payload, FINAL_CONCEPT_ORDERS)) + "\n", encoding="utf-8",
+    )
+    final_dir = tmp_path / "final-output"
+    final_qa = build_final(input_dir, pilot_dir, final_capture_path, final_dir)
+
+    assert pilot_qa["status"] == final_qa["status"] == "PASS"
+    assert final_qa["row_counts"]["concept_readiness_matrix"] == 15
+    assert final_qa["row_counts"]["opportunity_concept_cards"] == 8
+    assert final_qa["concept_card_orders"] == list(FINAL_CONCEPT_ORDERS)
+    assert final_qa["checks"]["accepted_pilot_orders_1_to_5_unchanged"] is True
+    assert final_qa["checks"]["accepted_pilot_report_unchanged"] is True
+    assert (final_dir / "PILOT_REPORT.md").read_bytes() == accepted_pilot_bytes["PILOT_REPORT.md"]
+    assert all((pilot_dir / name).read_bytes() == data for name, data in accepted_pilot_bytes.items())
+    assert (final_dir / "FINAL_REPORT.md").is_file()
 
 
 def test_capture_rejects_cross_family_and_unknown_basis_refs():

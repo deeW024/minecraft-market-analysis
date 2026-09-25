@@ -19,6 +19,7 @@ CAPTURE_VERSION = "yee-57-concept-capture-v0.1"
 BASELINE_COMMIT = "406a0965168c0bc753b78c963e34cea6f8ad38f1"
 EXPECTED_READY_ORDERS = (1, 2, 3, 4, 5, 8, 10, 11)
 PILOT_CONCEPT_ORDERS = (1, 2, 3, 4, 5)
+FINAL_CONCEPT_ORDERS = (1, 2, 3, 4, 5, 8, 10, 11)
 
 INPUT_HASHES = {
     "deep_commercial_validation.sqlite": "e82fa072e3e75a2b3deef7fa88fdc1f958928b75916708ffbf4e2a181260d6c1",
@@ -64,6 +65,12 @@ OUTPUT_FILES = (
     "opportunity_concept_cards.jsonl", "opportunity_concept_cards.csv",
     "CONCEPT_CAPTURE.json", "concept_synthesis.sqlite", "CONCEPT_SYNTHESIS_SCHEMA.md",
     "PILOT_REPORT.md", "QA_RESULT.json", "DATASET_MANIFEST.json",
+)
+FINAL_OUTPUT_FILES = (
+    "concept_readiness_matrix.jsonl", "concept_readiness_matrix.csv",
+    "opportunity_concept_cards.jsonl", "opportunity_concept_cards.csv",
+    "CONCEPT_CAPTURE.json", "concept_synthesis.sqlite", "CONCEPT_SYNTHESIS_SCHEMA.md",
+    "PILOT_REPORT.md", "FINAL_REPORT.md", "QA_RESULT.json", "DATASET_MANIFEST.json",
 )
 
 VERIFIED_MONETIZATION = {
@@ -294,21 +301,27 @@ def _validate_capture(
     capture: Mapping[str, Any],
     payload: Mapping[str, Sequence[Mapping[str, Any]]],
     readiness: Sequence[Mapping[str, Any]],
+    authorized_orders: Sequence[int] = PILOT_CONCEPT_ORDERS,
 ) -> dict[str, Mapping[str, Any]]:
     if set(capture) != {"capture_version", "families"} or capture.get("capture_version") != CAPTURE_VERSION:
         raise ConceptSynthesisError(f"CONCEPT_CAPTURE must use {CAPTURE_VERSION} and only its envelope fields")
     requested_orders = [row["deep_validation_order"] for row in readiness if row["concept_readiness"] == "CONCEPT_READY"]
     if tuple(requested_orders) != EXPECTED_READY_ORDERS:
         raise ConceptSynthesisError(f"readiness rule did not produce the spec's expected ready set: {requested_orders}")
-    authorized = [row for row in readiness if row["concept_readiness"] == "CONCEPT_READY" and row["deep_validation_order"] in PILOT_CONCEPT_ORDERS]
-    if [row["deep_validation_order"] for row in authorized] != list(PILOT_CONCEPT_ORDERS):
-        raise ConceptSynthesisError("pilot authorization requires ready orders 1..5")
+    authorized_orders = tuple(authorized_orders)
+    if authorized_orders not in {PILOT_CONCEPT_ORDERS, FINAL_CONCEPT_ORDERS}:
+        raise ConceptSynthesisError("unsupported concept-card authorization stage")
+    authorized = [row for row in readiness if row["concept_readiness"] == "CONCEPT_READY" and row["deep_validation_order"] in authorized_orders]
+    if [row["deep_validation_order"] for row in authorized] != list(authorized_orders):
+        raise ConceptSynthesisError(f"authorization requires ready orders {list(authorized_orders)}")
     capture_rows = capture.get("families")
     if not isinstance(capture_rows, list) or len(capture_rows) != len(authorized):
-        raise ConceptSynthesisError("CONCEPT_CAPTURE must contain exactly the five authorized pilot families")
+        count_word = "five" if len(authorized) == 5 else "eight"
+        stage_name = "pilot" if authorized_orders == PILOT_CONCEPT_ORDERS else "final"
+        raise ConceptSynthesisError(f"CONCEPT_CAPTURE must contain exactly the {count_word} authorized {stage_name} families")
     expected_ids = [row["family_id"] for row in authorized]
     if [row.get("family_id") for row in capture_rows] != expected_ids:
-        raise ConceptSynthesisError("CONCEPT_CAPTURE membership/order must be exactly ready orders 1..5")
+        raise ConceptSynthesisError(f"CONCEPT_CAPTURE membership/order must be exactly ready orders {list(authorized_orders)}")
     allowed_capture_fields = {"family_id", "concept_statement", "solution_primitives", "synthesis_notes"}
     if any(set(row) != allowed_capture_fields for row in capture_rows):
         raise ConceptSynthesisError("capture families may contain only family_id and interpretive fields")
@@ -413,7 +426,11 @@ def _normalize_cards(
     payload: Mapping[str, Sequence[Mapping[str, Any]]],
     readiness: Sequence[Mapping[str, Any]],
     capture_rows: Mapping[str, Mapping[str, Any]],
+    authorized_orders: Sequence[int] = PILOT_CONCEPT_ORDERS,
 ) -> list[dict[str, Any]]:
+    authorized_orders = tuple(authorized_orders)
+    if authorized_orders not in {PILOT_CONCEPT_ORDERS, FINAL_CONCEPT_ORDERS}:
+        raise ConceptSynthesisError("unsupported concept-card authorization stage")
     packs = {row["family_id"]: row for row in payload["commercial_validation_packs"]}
     readiness_by_id = {row["family_id"]: row for row in readiness}
     children: dict[str, dict[str, list[Mapping[str, Any]]]] = defaultdict(lambda: defaultdict(list))
@@ -424,7 +441,7 @@ def _normalize_cards(
     cards: list[dict[str, Any]] = []
     for matrix_row in readiness:
         order = matrix_row["deep_validation_order"]
-        if matrix_row["concept_readiness"] != "CONCEPT_READY" or order not in PILOT_CONCEPT_ORDERS:
+        if matrix_row["concept_readiness"] != "CONCEPT_READY" or order not in authorized_orders:
             continue
         family_id = matrix_row["family_id"]
         pack = packs[family_id]
@@ -482,8 +499,8 @@ def _normalize_cards(
             "evidence_refs": evidence_refs,
             "synthesis_notes": capture["synthesis_notes"],
         })
-    if [row["deep_validation_order"] for row in cards] != list(PILOT_CONCEPT_ORDERS):
-        raise ConceptSynthesisError("normalized pilot concept-card membership must be exactly orders 1..5")
+    if [row["deep_validation_order"] for row in cards] != list(authorized_orders):
+        raise ConceptSynthesisError(f"normalized concept-card membership must be exactly orders {list(authorized_orders)}")
     return cards
 
 
@@ -493,7 +510,9 @@ def _semantic_checks(
     capture: Mapping[str, Any],
     capture_rows: Mapping[str, Mapping[str, Any]],
     cards: Sequence[Mapping[str, Any]],
+    authorized_orders: Sequence[int] = PILOT_CONCEPT_ORDERS,
 ) -> dict[str, bool]:
+    authorized_orders = tuple(authorized_orders)
     packs = {row["family_id"]: row for row in payload["commercial_validation_packs"]}
     matrix = {row["family_id"]: row for row in readiness}
     owner_by_ref = _family_ref_maps(payload)[1]
@@ -512,11 +531,11 @@ def _semantic_checks(
         clusters[family_id].sort(key=lambda row: row["cluster_id"])
         alternatives[family_id].sort(key=lambda row: row["alternative_id"])
 
-    authorized_ids = [row["family_id"] for row in readiness if row["concept_readiness"] == "CONCEPT_READY" and row["deep_validation_order"] in PILOT_CONCEPT_ORDERS]
+    authorized_ids = [row["family_id"] for row in readiness if row["concept_readiness"] == "CONCEPT_READY" and row["deep_validation_order"] in authorized_orders]
     capture_ids = [row.get("family_id") for row in capture.get("families", [])]
     capture_exact = (
         capture_ids == authorized_ids
-        and len(capture_ids) == 5
+        and len(capture_ids) == len(authorized_orders)
         and all(set(row) == {"family_id", "concept_statement", "solution_primitives", "synthesis_notes"} for row in capture["families"])
     )
     cards_by_id = {row["family_id"]: row for row in cards}
@@ -681,10 +700,12 @@ def _output_checks(output: Path, readiness: Sequence[Mapping[str, Any]], cards: 
     return checks
 
 
-def _schema_text() -> str:
+def _schema_text(authorized_orders: Sequence[int] = PILOT_CONCEPT_ORDERS) -> str:
+    authorized_orders = tuple(authorized_orders)
+    stage = "pilot" if authorized_orders == PILOT_CONCEPT_ORDERS else "final"
     lines = [
         "# YEE-57 Concept Synthesis Schema v0.1", "",
-        "Deterministic concept-readiness matrix for all accepted YEE-55 COHORT_A families and evidence-linked candidate concept cards for the authorized pilot families only.",
+        f"Deterministic concept-readiness matrix for all accepted YEE-55 COHORT_A families and evidence-linked candidate concept cards for the authorized {stage} families only.",
         "Candidate concepts are hypotheses for review, not recommendations or market conclusions. No score, ranking, price recommendation, TAM, revenue, profit, or prevalence estimate is produced.",
         "", "## Canonical inputs", "",
     ]
@@ -726,11 +747,11 @@ def _schema_text() -> str:
         "| `uncertainty_flags`, `next_validation_questions` | Deterministically derived flags/prompts; not new findings. |",
         "| `evidence_refs` | Sorted same-family YEE-55 evidence/cluster/alternative/hypothesis IDs. |",
         "", "## Capture and reference semantics", "",
-        f"CONCEPT_CAPTURE version `{CAPTURE_VERSION}` contains exactly the authorized pilot families and only family_id plus concept_statement, solution_primitives, and synthesis_notes. Derived fields are never manually authored.",
+        f"CONCEPT_CAPTURE version `{CAPTURE_VERSION}` contains exactly the authorized {stage} families and only family_id plus concept_statement, solution_primitives, and synthesis_notes. Derived fields are never manually authored.",
         "Solution primitive basis_type is PAIN_RESPONSE, DIFFERENTIATION_DIRECTION, or JOB_ENABLEMENT. Every basis_refs ID must resolve within the same family; PAIN_RESPONSE cites pain evidence/cluster, DIFFERENTIATION_DIRECTION cites its hypothesis and evidence, and JOB_ENABLEMENT cites buyer/job evidence.",
         "Pain status and cluster sample statuses are preserved verbatim. LIMITED_SAMPLE stays limited; UNKNOWN and missing remain unknown/missing. CSV nulls use \\N; JSON/SQLite preserve null values.",
-        "", "## Pilot authorization", "",
-        "Readiness matrix: all 15 rows. Concept cards: exactly deep_validation_order 1..5. Orders 8, 10, and 11 are not authorized in this pilot.",
+        "", f"## {stage.title()} authorization", "",
+        f"Readiness matrix: all 15 rows. Concept cards: exactly deep_validation_order {', '.join(map(str, authorized_orders))}.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -766,9 +787,76 @@ def _report_text(readiness: Sequence[Mapping[str, Any]], cards: Sequence[Mapping
     return "\n".join(lines)
 
 
+def _final_report_text(readiness: Sequence[Mapping[str, Any]], cards: Sequence[Mapping[str, Any]], qa: Mapping[str, Any]) -> str:
+    ready = [row["deep_validation_order"] for row in readiness if row["concept_readiness"] == "CONCEPT_READY"]
+    needs = [row["deep_validation_order"] for row in readiness if row["concept_readiness"] == "NEEDS_EVIDENCE"]
+    orders = [row["deep_validation_order"] for row in cards]
+    return "\n".join([
+        "# YEE-57 Concept Synthesis Final Report", "", f"Status: **{qa['status']}**", "",
+        "Authorization: deterministic readiness for all 15 accepted YEE-55 COHORT_A families; concept cards for all eight authorized CONCEPT_READY orders.",
+        "", f"- Readiness rows: {len(readiness)} ({len(ready)} CONCEPT_READY / {len(needs)} NEEDS_EVIDENCE)",
+        f"- CONCEPT_READY orders: `{ready}`", f"- NEEDS_EVIDENCE orders: `{needs}`",
+        f"- Concept cards: {len(cards)} for orders `{orders}`",
+        "- Accepted pilot orders 1..5 and `PILOT_REPORT.md` are preserved unchanged.",
+        "- Read-only YEE-55 SQLite and six JSONL exports reconciled; pinned input hashes stable before/after.",
+        "- SQLite integrity/FK, JSONL/CSV/SQLite reconciliation, same-family basis references, and deterministic replay: `PASS`.",
+        "- No new research or API/web calls; no ranking, score, pricing recommendation, TAM/revenue/profit, or product recommendation.",
+        "", "## Readiness matrix", "", "| Order | Rank | Family | Buyer | Pain | Feasibility | Alternatives | Differentiation | Commercial state | Readiness | Reasons |", "|---:|---:|---|---|---|---|---:|---:|---|---|---|",
+        *[
+            f"| {row['deep_validation_order']} | {row['consensus_rank']} | `{row['canonical_topic_key']}` | {row['buyer_job_status']} | {row['pain_status']} | {row['feasibility_status']} | {row['retained_alternative_count']} | {row['differentiation_count']} | {row['commercial_signal_state']} | {row['concept_readiness']} | {', '.join(row['readiness_reasons']) or '—'} |"
+            for row in readiness
+        ],
+        "", "## Final concept-card coverage", "", "| Order | Family | Commercial state | Uncertainty flags |", "|---:|---|---|---|",
+        *[
+            f"| {card['deep_validation_order']} | `{card['canonical_topic_key']}` | {card['commercial_signal_state']} | {', '.join(card['uncertainty_flags']) or '—'} |"
+            for card in cards
+        ],
+        "", "## Interpretation limits", "",
+        "Concept statements and primitives are evidence-linked hypotheses for supervisor review. Limited pain evidence is not a prevalence estimate. Missing price is not FREE; comparative coverage is not proof of market conditions. Feasibility facts are not estimates of implementation effort, cost, or probability.",
+        "", "## QA", "", "- Full suite evidence is linked in the PR.",
+        f"- Canonical YEE-55 input SHA-256 stable: `{qa['checks']['canonical_input_hashes_stable']}`.",
+        f"- Accepted pilot orders 1..5 unchanged: `{qa['checks']['accepted_pilot_orders_1_to_5_unchanged']}`.",
+        f"- Deterministic replay byte-identical: `{qa['checks']['deterministic_replay_byte_identical']}`.",
+        "", "See `QA_RESULT.json`, `DATASET_MANIFEST.json`, `CONCEPT_CAPTURE.json`, and retained `PILOT_REPORT.md` for exact evidence.", "",
+    ])
+
+
+def _accepted_pilot_preserved(
+    accepted_pilot_dir: Path,
+    payload: Mapping[str, Sequence[Mapping[str, Any]]],
+    readiness: Sequence[Mapping[str, Any]],
+    capture: Mapping[str, Any],
+    cards: Sequence[Mapping[str, Any]],
+) -> bool:
+    try:
+        pilot_capture = json.loads((accepted_pilot_dir / "CONCEPT_CAPTURE.json").read_text(encoding="utf-8-sig"))
+        pilot_readiness = _read_jsonl(accepted_pilot_dir / "concept_readiness_matrix.jsonl")
+        pilot_cards = _read_jsonl(accepted_pilot_dir / "opportunity_concept_cards.jsonl")
+        pilot_qa = json.loads((accepted_pilot_dir / "QA_RESULT.json").read_text(encoding="utf-8-sig"))
+        pilot_rows = _validate_capture(pilot_capture, payload, readiness, PILOT_CONCEPT_ORDERS)
+        pilot_expected_cards = _normalize_cards(payload, readiness, pilot_rows, PILOT_CONCEPT_ORDERS)
+    except (OSError, json.JSONDecodeError, ConceptSynthesisError, KeyError, TypeError):
+        return False
+    return (
+        pilot_qa.get("status") == "PASS"
+        and all(pilot_qa.get("checks", {}).values())
+        and len(pilot_readiness) == 15
+        and len(pilot_cards) == len(PILOT_CONCEPT_ORDERS)
+        and pilot_readiness == list(readiness)
+        and pilot_cards == pilot_expected_cards
+        and pilot_cards == list(cards[:len(PILOT_CONCEPT_ORDERS)])
+        and list(pilot_capture.get("families", [])) == list(capture.get("families", [])[:len(PILOT_CONCEPT_ORDERS)])
+        and all(_output_checks(accepted_pilot_dir, pilot_readiness, pilot_cards).values())
+    )
+
+
 def _render(
     input_dir: Path, capture_path: Path, output_dir: Path, *, deterministic_replay: bool,
+    stage: str = "PILOT", accepted_pilot_dir: Path | None = None,
 ) -> dict[str, Any]:
+    if stage not in {"PILOT", "FINAL"}:
+        raise ConceptSynthesisError(f"unsupported YEE-57 render stage: {stage}")
+    authorized_orders = PILOT_CONCEPT_ORDERS if stage == "PILOT" else FINAL_CONCEPT_ORDERS
     payload, hashes_before, input_checks = _load_inputs(input_dir)
     capture_bytes = capture_path.read_bytes()
     try:
@@ -779,9 +867,11 @@ def _render(
     ready_orders = [row["deep_validation_order"] for row in readiness if row["concept_readiness"] == "CONCEPT_READY"]
     if tuple(ready_orders) != EXPECTED_READY_ORDERS:
         raise ConceptSynthesisError(f"deterministic readiness mismatch: {ready_orders}")
-    capture_rows = _validate_capture(capture, payload, readiness)
-    cards = _normalize_cards(payload, readiness, capture_rows)
-    semantic_checks = _semantic_checks(payload, readiness, capture, capture_rows, cards)
+    capture_rows = _validate_capture(capture, payload, readiness, authorized_orders)
+    cards = _normalize_cards(payload, readiness, capture_rows, authorized_orders)
+    semantic_checks = _semantic_checks(payload, readiness, capture, capture_rows, cards, authorized_orders)
+    if stage == "FINAL" and accepted_pilot_dir is None:
+        raise ConceptSynthesisError("final render requires the accepted pilot directory")
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "concept_readiness_matrix.jsonl").write_bytes(_jsonl_bytes(readiness))
     (output_dir / "concept_readiness_matrix.csv").write_bytes(_csv_bytes(readiness, READINESS_COLUMNS))
@@ -793,19 +883,36 @@ def _render(
         "schema_version": SCHEMA_VERSION,
         "capture_version": CAPTURE_VERSION,
         "baseline_commit": BASELINE_COMMIT,
-        "authorization": "PILOT_READINESS_ALL_15_CONCEPT_CARDS_ORDERS_1_TO_5",
+        "authorization": "FINAL_READINESS_ALL_15_CONCEPT_CARDS_ORDERS_1_2_3_4_5_8_10_11" if stage == "FINAL" else "PILOT_READINESS_ALL_15_CONCEPT_CARDS_ORDERS_1_TO_5",
         "canonical_input_hashes": hashes_before,
         "concept_capture_sha256": hashlib.sha256(capture_bytes).hexdigest(),
     })
-    (output_dir / "CONCEPT_SYNTHESIS_SCHEMA.md").write_text(_schema_text(), encoding="utf-8", newline="\n")
+    (output_dir / "CONCEPT_SYNTHESIS_SCHEMA.md").write_text(_schema_text(authorized_orders), encoding="utf-8", newline="\n")
+    if stage == "FINAL":
+        pilot_report = accepted_pilot_dir / "PILOT_REPORT.md"
+        if not pilot_report.is_file():
+            raise ConceptSynthesisError("accepted pilot PILOT_REPORT.md is missing")
+        (output_dir / "PILOT_REPORT.md").write_bytes(pilot_report.read_bytes())
+        accepted_pilot_unchanged = _accepted_pilot_preserved(accepted_pilot_dir, payload, readiness, capture, cards)
+        accepted_pilot_report_unchanged = (output_dir / "PILOT_REPORT.md").read_bytes() == pilot_report.read_bytes()
+    else:
+        accepted_pilot_unchanged = True
+        accepted_pilot_report_unchanged = True
     output_checks = _output_checks(output_dir, readiness, cards)
     hashes_after = {name: _sha256(input_dir / name) for name in INPUT_HASHES}
+    card_membership_check = (
+        {"pilot_cards_exact_orders_1_to_5": [row["deep_validation_order"] for row in cards] == list(PILOT_CONCEPT_ORDERS)}
+        if stage == "PILOT" else
+        {"final_cards_exact_orders_1_2_3_4_5_8_10_11": [row["deep_validation_order"] for row in cards] == list(FINAL_CONCEPT_ORDERS)}
+    )
     checks: dict[str, bool] = {
         **input_checks,
         "exact_15_family_universe": len(readiness) == 15 and [row["deep_validation_order"] for row in readiness] == list(range(1, 16)),
         "readiness_expected_8_and_7": sum(row["concept_readiness"] == "CONCEPT_READY" for row in readiness) == 8 and sum(row["concept_readiness"] == "NEEDS_EVIDENCE" for row in readiness) == 7,
         "readiness_exact_expected_orders": ready_orders == list(EXPECTED_READY_ORDERS),
-        "pilot_cards_exact_orders_1_to_5": [row["deep_validation_order"] for row in cards] == list(PILOT_CONCEPT_ORDERS),
+        "accepted_pilot_orders_1_to_5_unchanged": accepted_pilot_unchanged,
+        "accepted_pilot_report_unchanged": accepted_pilot_report_unchanged,
+        **card_membership_check,
         "cards_derived_from_ready_families": all(row["concept_readiness"] == "CONCEPT_READY" for row in cards),
         "canonical_input_hashes_stable": hashes_before == hashes_after,
         "deterministic_replay_byte_identical": deterministic_replay,
@@ -817,7 +924,7 @@ def _render(
         "work_order": WORK_ORDER,
         "schema_version": SCHEMA_VERSION,
         "status": "PASS" if not errors else "FAIL",
-        "authorized_scope": "readiness orders 1..15; concept cards orders 1..5 only",
+        "authorized_scope": "readiness orders 1..15; concept cards orders 1,2,3,4,5,8,10,11" if stage == "FINAL" else "readiness orders 1..15; concept cards orders 1..5 only",
         "canonical_input_hashes_before": hashes_before,
         "canonical_input_hashes_after": hashes_after,
         "capture_sha256": hashlib.sha256(capture_bytes).hexdigest(),
@@ -828,13 +935,18 @@ def _render(
             **{table: len(rows) for table, rows in payload.items()},
         },
         "concept_ready_orders": ready_orders,
-        "pilot_concept_orders": [row["deep_validation_order"] for row in cards],
+        "concept_card_orders": [row["deep_validation_order"] for row in cards],
         "errors": errors,
     }
     (output_dir / "QA_RESULT.json").write_text(canonical_json(qa) + "\n", encoding="utf-8", newline="\n")
-    (output_dir / "PILOT_REPORT.md").write_text(_report_text(readiness, cards, qa), encoding="utf-8", newline="\n")
+    if stage == "PILOT":
+        (output_dir / "PILOT_REPORT.md").write_text(_report_text(readiness, cards, qa), encoding="utf-8", newline="\n")
+        output_files = OUTPUT_FILES
+    else:
+        (output_dir / "FINAL_REPORT.md").write_text(_final_report_text(readiness, cards, qa), encoding="utf-8", newline="\n")
+        output_files = FINAL_OUTPUT_FILES
     manifest_files = []
-    for name in OUTPUT_FILES:
+    for name in output_files:
         if name == "DATASET_MANIFEST.json":
             continue
         path = output_dir / name
@@ -842,7 +954,7 @@ def _render(
     manifest = {
         "work_order": WORK_ORDER,
         "schema_version": SCHEMA_VERSION,
-        "authorization": "PILOT_READINESS_ALL_15_CONCEPT_CARDS_ORDERS_1_TO_5",
+        "authorization": "FINAL_READINESS_ALL_15_CONCEPT_CARDS_ORDERS_1_2_3_4_5_8_10_11" if stage == "FINAL" else "PILOT_READINESS_ALL_15_CONCEPT_CARDS_ORDERS_1_TO_5",
         "baseline_commit": BASELINE_COMMIT,
         "canonical_input_hashes": hashes_before,
         "row_counts": qa["row_counts"],
@@ -876,5 +988,45 @@ def build_pilot(input_dir: Path, capture_path: Path, output_dir: Path) -> dict[s
     return final_qa
 
 
-def _byte_identical(left: Path, right: Path) -> bool:
-    return all((left / name).read_bytes() == (right / name).read_bytes() for name in OUTPUT_FILES)
+def build_final(
+    input_dir: Path, accepted_pilot_dir: Path, capture_path: Path, output_dir: Path,
+) -> dict[str, Any]:
+    """Build the supervisor-authorized final cards and verify full replay/pilot preservation."""
+    output_dir = output_dir.resolve()
+    accepted_pilot_dir = accepted_pilot_dir.resolve()
+    if output_dir == accepted_pilot_dir:
+        raise ConceptSynthesisError("final outputs must not overwrite the accepted pilot directory")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="yee57-final-replay-", dir=output_dir.parent) as first_temp:
+        first_qa = _render(
+            input_dir, capture_path, output_dir, deterministic_replay=False,
+            stage="FINAL", accepted_pilot_dir=accepted_pilot_dir,
+        )
+        first_replay = Path(first_temp) / "replay"
+        _render(
+            input_dir, capture_path, first_replay, deterministic_replay=False,
+            stage="FINAL", accepted_pilot_dir=accepted_pilot_dir,
+        )
+        if not all(value for key, value in first_qa["checks"].items() if key != "deterministic_replay_byte_identical"):
+            raise ConceptSynthesisError(f"final QA failed: {first_qa['errors']}")
+        if not _byte_identical(output_dir, first_replay, FINAL_OUTPUT_FILES):
+            raise ConceptSynthesisError("preliminary final dataset replay was not byte-identical")
+    with tempfile.TemporaryDirectory(prefix="yee57-final-replay-", dir=output_dir.parent) as second_temp:
+        final_qa = _render(
+            input_dir, capture_path, output_dir, deterministic_replay=True,
+            stage="FINAL", accepted_pilot_dir=accepted_pilot_dir,
+        )
+        final_replay = Path(second_temp) / "replay"
+        replay_qa = _render(
+            input_dir, capture_path, final_replay, deterministic_replay=True,
+            stage="FINAL", accepted_pilot_dir=accepted_pilot_dir,
+        )
+        if not _byte_identical(output_dir, final_replay, FINAL_OUTPUT_FILES):
+            raise ConceptSynthesisError("final dataset replay was not byte-identical")
+        if final_qa["status"] != "PASS" or replay_qa["status"] != "PASS":
+            raise ConceptSynthesisError(f"final QA failed: {final_qa['errors']}")
+    return final_qa
+
+
+def _byte_identical(left: Path, right: Path, files: Sequence[str] = OUTPUT_FILES) -> bool:
+    return all((left / name).read_bytes() == (right / name).read_bytes() for name in files)
