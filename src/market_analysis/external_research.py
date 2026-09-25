@@ -45,6 +45,8 @@ CLAIM_TYPES = {
 RELATION_TYPES = {"DIRECT", "SUBSTITUTE", "ADJACENT"}
 RESEARCH_STATUSES = {"RESOLVED", "AMBIGUOUS", "UNRESOLVED"}
 REQUIRED_RESOLVED_QUERY_PURPOSES = ("current lifecycle/identity check", "pain-point discovery")
+FINAL_RESOLVED_COMPETITOR_QUERY_PURPOSE = "competitor discovery"
+LIFECYCLE_ABSENCE_NOTE = "No source-stated lifecycle datum was exposed on the opened primary/current listing."
 
 PACK_BASE_COLUMNS = (
     "family_id", "consensus_rank", "canonical_topic_key", "member_topic_keys", "aliases",
@@ -715,6 +717,34 @@ def _validate_payload(
             for purpose in REQUIRED_RESOLVED_QUERY_PURPOSES:
                 if purpose not in observed_purposes:
                     errors.append(f"RESOLVED family lacks required query purpose {purpose!r}: {family_id}")
+            if seed.get("consensus_rank", 0) > 10:
+                if FINAL_RESOLVED_COMPETITOR_QUERY_PURPOSE not in observed_purposes:
+                    errors.append(
+                        f"final RESOLVED family lacks required query purpose "
+                        f"{FINAL_RESOLVED_COMPETITOR_QUERY_PURPOSE!r}: {family_id}"
+                    )
+                family_claims = {row["claim_type"] for row in evidence_by_family.get(family_id, [])}
+                if len(evidence_by_family.get(family_id, [])) < 2 or not {
+                    "SEMANTIC_IDENTITY", "FEATURE"
+                }.issubset(family_claims):
+                    errors.append(
+                        f"final RESOLVED family needs at least two retained SEMANTIC_IDENTITY + FEATURE evidence rows: {family_id}"
+                    )
+                if not pack["feature_themes"]:
+                    errors.append(f"final RESOLVED family lacks source-backed feature_themes: {family_id}")
+                for feature in pack["feature_themes"]:
+                    feature_rows = [evidence_by_id[eid] for eid in feature["evidence_ids"] if eid in evidence_by_id]
+                    if (
+                        not feature["theme"] or not feature_rows
+                        or len(feature_rows) != len(feature["evidence_ids"])
+                        or any(row["family_id"] != family_id or row["claim_type"] != "FEATURE" for row in feature_rows)
+                    ):
+                        errors.append(f"final RESOLVED feature theme is not source-backed by FEATURE evidence: {family_id}")
+                has_maintenance = any(row["claim_type"] == "MAINTENANCE" for row in evidence_by_family.get(family_id, []))
+                if not has_maintenance and LIFECYCLE_ABSENCE_NOTE.casefold() not in pack["research_notes"].casefold():
+                    errors.append(
+                        f"final RESOLVED family without MAINTENANCE evidence lacks explicit lifecycle-absence note: {family_id}"
+                    )
         elif status != "RESOLVED" and (pack["resolved_concept_name"] is not None or pack["primary_entity_url"] is not None):
             errors.append(f"non-RESOLVED family is force-mapped to a primary entity: {family_id}")
 
@@ -779,10 +809,68 @@ def _validate_payload(
     query_purpose_presence_by_rank = {
         str(pack["consensus_rank"]): {
             purpose: purpose in {row["purpose"] for row in queries_by_family.get(pack["family_id"], [])}
-            for purpose in REQUIRED_RESOLVED_QUERY_PURPOSES
+            for purpose in (
+                (*REQUIRED_RESOLVED_QUERY_PURPOSES, FINAL_RESOLVED_COMPETITOR_QUERY_PURPOSE)
+                if pack["consensus_rank"] > 10 else REQUIRED_RESOLVED_QUERY_PURPOSES
+            )
         }
         for pack in families if pack["research_status"] == "RESOLVED"
     }
+    resolved_research_depth_by_rank = {}
+    for pack in families:
+        if pack["research_status"] != "RESOLVED" or pack["consensus_rank"] <= 10:
+            continue
+        family_id = pack["family_id"]
+        family_rows = evidence_by_family.get(family_id, [])
+        family_claims = {row["claim_type"] for row in family_rows}
+        purposes = {row["purpose"] for row in queries_by_family.get(family_id, [])}
+        resolved_research_depth_by_rank[str(pack["consensus_rank"])] = {
+            "retained_evidence_count": len(family_rows),
+            "has_semantic_identity": "SEMANTIC_IDENTITY" in family_claims,
+            "has_feature": "FEATURE" in family_claims,
+            "feature_theme_count": len(pack["feature_themes"]),
+            "competitor_discovery_query_count": sum(
+                row["purpose"] == FINAL_RESOLVED_COMPETITOR_QUERY_PURPOSE
+                for row in queries_by_family.get(family_id, [])
+            ),
+            "has_maintenance_evidence": "MAINTENANCE" in family_claims,
+            "lifecycle_absence_noted": LIFECYCLE_ABSENCE_NOTE.casefold() in pack["research_notes"].casefold(),
+            "depth_contract_passed": (
+                len(family_rows) >= 2
+                and {"SEMANTIC_IDENTITY", "FEATURE"}.issubset(family_claims)
+                and bool(pack["feature_themes"])
+                and FINAL_RESOLVED_COMPETITOR_QUERY_PURPOSE in purposes
+                and ("MAINTENANCE" in family_claims or LIFECYCLE_ABSENCE_NOTE.casefold() in pack["research_notes"].casefold())
+                and all(
+                    feature["theme"] and feature["evidence_ids"]
+                    and all(
+                        eid in evidence_by_id
+                        and evidence_by_id[eid]["family_id"] == family_id
+                        and evidence_by_id[eid]["claim_type"] == "FEATURE"
+                        for eid in feature["evidence_ids"]
+                    )
+                    for feature in pack["feature_themes"]
+                )
+            ),
+        }
+    resolved_research_depth_summary = {
+        "resolved_rank_count": len(resolved_research_depth_by_rank),
+        "depth_contract_pass_count": sum(row["depth_contract_passed"] for row in resolved_research_depth_by_rank.values()),
+        "families_with_feature_evidence": sum(row["has_feature"] for row in resolved_research_depth_by_rank.values()),
+        "families_with_feature_themes": sum(row["feature_theme_count"] > 0 for row in resolved_research_depth_by_rank.values()),
+        "competitor_discovery_query_count": sum(row["competitor_discovery_query_count"] for row in resolved_research_depth_by_rank.values()),
+        "families_with_retained_competitor_entities": sum(
+            bool(entities_by_family.get(pack["family_id"], []))
+            for pack in families
+            if str(pack["consensus_rank"]) in resolved_research_depth_by_rank
+        ),
+        "families_with_maintenance_evidence": sum(row["has_maintenance_evidence"] for row in resolved_research_depth_by_rank.values()),
+        "families_with_explicit_lifecycle_absence_note": sum(row["lifecycle_absence_noted"] for row in resolved_research_depth_by_rank.values()),
+    }
+    resolved_research_depth_summary["families_without_retained_competitor_entities"] = (
+        resolved_research_depth_summary["resolved_rank_count"]
+        - resolved_research_depth_summary["families_with_retained_competitor_entities"]
+    )
     return {
         "status": "PASS" if not errors else "FAIL",
         "errors": errors,
@@ -801,6 +889,8 @@ def _validate_payload(
             for family_id in selected_ids
         },
         "query_purpose_presence_by_rank": query_purpose_presence_by_rank,
+        "resolved_research_depth_by_rank": resolved_research_depth_by_rank,
+        "resolved_research_depth_summary": resolved_research_depth_summary,
         "evidence_count_by_family": {family_id: len(evidence_by_family.get(family_id, [])) for family_id in selected_ids},
     }
 
@@ -947,6 +1037,13 @@ def _report(qa: Mapping[str, Any], *, stage: str = "PILOT") -> str:
         f"- Opened-page counts by rank: `{_canonical_json(details['opened_page_count_by_rank'])}`.",
         f"- Executed queries by rank: `{_canonical_json(details['query_count_by_rank'])}`.",
         f"- Required lifecycle/identity and pain-point query purposes by resolved rank: `{_canonical_json(details['query_purpose_presence_by_rank'])}`.",
+        *(
+            [
+                f"- Final resolved research-depth summary (ranks 11..100): `{_canonical_json(details['resolved_research_depth_summary'])}`.",
+                f"- Final resolved research-depth QA by rank (11..100): `{_canonical_json(details['resolved_research_depth_by_rank'])}`.",
+            ]
+            if is_final else []
+        ),
         "",
         "## Family-level gaps/ambiguity",
         "",
@@ -1188,6 +1285,13 @@ def build_final(
         "sqlite_jsonl_csv_counts_and_schema_reconcile": output_checks["table_counts_match"] and output_checks["table_columns_match_schema"],
         "deterministic_replay_byte_identical": replay_identical,
         "opened_source_pages_registered_and_within_budget": all(0 <= count <= 15 for count in opened_page_count_by_rank.values()) and all(evidence["query_id"] is not None for evidence in payload["external_evidence"]),
+        "final_resolved_research_depth_contract": all(
+            item["depth_contract_passed"]
+            for item in validation["resolved_research_depth_by_rank"].values()
+        ) and len(validation["resolved_research_depth_by_rank"]) == sum(
+            row["research_status"] == "RESOLVED" and row["consensus_rank"] > 10
+            for row in payload["family_research_packs"]
+        ),
     }
     status = "PASS" if validation["status"] == "PASS" and all(checks.values()) else "FAIL"
     qa = {
@@ -1219,6 +1323,8 @@ def build_final(
             "query_count_by_rank": validation["query_count_by_rank"],
             "query_purpose_count_by_family": validation["query_purpose_count_by_family"],
             "query_purpose_presence_by_rank": validation["query_purpose_presence_by_rank"],
+            "resolved_research_depth_by_rank": validation["resolved_research_depth_by_rank"],
+            "resolved_research_depth_summary": validation["resolved_research_depth_summary"],
             "opened_page_count_by_rank": opened_page_count_by_rank,
             "evidence_count_by_family": validation["evidence_count_by_family"],
             "family_summaries": [

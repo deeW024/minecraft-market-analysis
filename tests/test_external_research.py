@@ -258,6 +258,173 @@ def test_resolved_family_passes_exact_lifecycle_and_pain_query_purpose_gate():
     }
 
 
+def _resolved_final_depth_capture(*, maintenance=False):
+    family = _canonical_families_100()[10]
+    capture = _capture_for_families([family])
+    family_capture = capture["families"][0]
+    family_capture.update({
+        "research_status": "RESOLVED",
+        "resolved_concept_name": "Example final-rank Minecraft resource",
+        "concept_summary": "A documented resource with a concrete user-facing feature.",
+        "primary_entity_url": "https://example.org/final-resource",
+        "concept_evidence_refs": ["ev-final-identity"],
+        "primary_entity_evidence_refs": ["ev-final-identity"],
+        "feature_themes": [{
+            "theme": "configurable world structures",
+            "evidence_refs": ["ev-final-feature"],
+        }],
+        "research_notes": "Competitor discovery completed; no defensible current competitor was retained. "
+        + (research.LIFECYCLE_ABSENCE_NOTE if not maintenance else ""),
+    })
+    capture["queries"][0]["purpose"] = "current lifecycle/identity check"
+    capture["queries"][1]["purpose"] = "pain-point discovery"
+    capture["queries"][2]["purpose"] = "competitor discovery"
+    capture["queries"][2]["result_action"] = "Reviewed current candidates; none defensibly overlaps the family."
+    capture["opened_pages"].append({
+        "capture_id": "page-final-product",
+        "family_id": family["family_id"],
+        "query_ref": "q-11-1",
+        "source_url": "https://example.org/final-resource",
+        "source_title": "Example final resource",
+        "source_type": "PRIMARY_PRODUCT",
+        "retrieved_at": "2026-09-25T01:00:00Z",
+        "published_or_updated_at": "2026-09-20" if maintenance else None,
+    })
+    capture["evidence"].extend([
+        {
+            "capture_id": "ev-final-identity",
+            "family_id": family["family_id"],
+            "page_ref": "page-final-product",
+            "claim_type": "SEMANTIC_IDENTITY",
+            "observation": "The publisher identifies this page as the current Minecraft resource.",
+        },
+        {
+            "capture_id": "ev-final-feature",
+            "family_id": family["family_id"],
+            "page_ref": "page-final-product",
+            "claim_type": "FEATURE",
+            "observation": "The listing describes configurable world structures as a user-facing feature.",
+        },
+    ])
+    if maintenance:
+        capture["evidence"].append({
+            "capture_id": "ev-final-maintenance",
+            "family_id": family["family_id"],
+            "page_ref": "page-final-product",
+            "claim_type": "MAINTENANCE",
+            "observation": "The listing identifies September 20, 2026 as the current release/update date.",
+        })
+        family_capture["maintenance_evidence_refs"] = ["ev-final-maintenance"]
+    return family, capture
+
+
+def test_final_resolved_family_requires_feature_competitor_discovery_and_lifecycle_disposition():
+    family, capture = _resolved_final_depth_capture()
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+
+    assert qa["status"] == "PASS"
+    assert qa["resolved_research_depth_by_rank"]["11"] == {
+        "retained_evidence_count": 2,
+        "has_semantic_identity": True,
+        "has_feature": True,
+        "feature_theme_count": 1,
+        "competitor_discovery_query_count": 1,
+        "has_maintenance_evidence": False,
+        "lifecycle_absence_noted": True,
+        "depth_contract_passed": True,
+    }
+
+
+def test_final_resolved_identity_only_pack_fails_feature_depth_gate():
+    family, capture = _resolved_final_depth_capture()
+    capture["evidence"] = [row for row in capture["evidence"] if row["claim_type"] != "FEATURE"]
+    capture["families"][0]["feature_themes"] = []
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+
+    assert any("at least two retained SEMANTIC_IDENTITY + FEATURE" in error for error in qa["errors"])
+    assert any("lacks source-backed feature_themes" in error for error in qa["errors"])
+
+
+def test_final_resolved_family_requires_dedicated_competitor_discovery_query():
+    family, capture = _resolved_final_depth_capture()
+    capture["queries"][2]["purpose"] = "general discovery"
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+
+    assert any("lacks required query purpose 'competitor discovery'" in error for error in qa["errors"])
+
+
+def test_final_resolved_family_requires_maintenance_evidence_or_explicit_absence_note():
+    family, capture = _resolved_final_depth_capture()
+    capture["families"][0]["research_notes"] = "Competitor discovery completed; no defensible current competitor was retained."
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+    assert any("lacks explicit lifecycle-absence note" in error for error in qa["errors"])
+
+    family, capture = _resolved_final_depth_capture(maintenance=True)
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+    assert qa["status"] == "PASS"
+    assert qa["resolved_research_depth_by_rank"]["11"]["has_maintenance_evidence"]
+
+
+def test_final_feature_themes_must_reference_feature_claims():
+    family, capture = _resolved_final_depth_capture()
+    capture["families"][0]["feature_themes"][0]["evidence_refs"] = ["ev-final-identity"]
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+
+    assert any("feature theme is not source-backed by FEATURE evidence" in error for error in qa["errors"])
+
+
+def test_final_depth_summary_counts_retained_competitor_entities_by_family():
+    family, capture = _resolved_final_depth_capture()
+    capture["opened_pages"].append({
+        "capture_id": "page-final-competitor",
+        "family_id": family["family_id"],
+        "query_ref": "q-11-3",
+        "source_url": "https://example.org/alternative",
+        "source_title": "Alternative resource",
+        "source_type": "MARKETPLACE_LISTING",
+        "retrieved_at": "2026-09-25T01:00:00Z",
+    })
+    capture["evidence"].extend([
+        {
+            "capture_id": "ev-final-competitor-feature",
+            "family_id": family["family_id"],
+            "page_ref": "page-final-competitor",
+            "claim_type": "FEATURE",
+            "observation": "The alternative listing documents the same core task.",
+        },
+        {
+            "capture_id": "ev-final-competitor-relation",
+            "family_id": family["family_id"],
+            "page_ref": "page-final-competitor",
+            "claim_type": "COMPETITOR_RELATION",
+            "observation": "Both opened listings document resources for the same core task; SUBSTITUTE is analyst inference.",
+        },
+    ])
+    capture["competitors"].append({
+        "capture_id": "cmp-final-alternative",
+        "family_id": family["family_id"],
+        "entity_name": "Alternative resource",
+        "canonical_url": "https://example.org/alternative",
+        "relation_type": "SUBSTITUTE",
+        "product_type": "Minecraft resource",
+        "platform_or_ecosystem": "Minecraft",
+        "feature_summary": "A resource for the same core task.",
+        "evidence_refs": ["ev-final-competitor-feature", "ev-final-competitor-relation"],
+    })
+    normalized = research._normalize_capture(capture, [family], [family])
+    qa = research._validate_payload(normalized, [family], [family])
+
+    assert qa["status"] == "PASS"
+    assert qa["resolved_research_depth_summary"]["families_with_retained_competitor_entities"] == 1
+    assert qa["resolved_research_depth_summary"]["families_without_retained_competitor_entities"] == 0
+
+
 def test_query_count_by_rank_reports_executed_attempts():
     capture = _capture()
     normalized = research._normalize_capture(capture, _canonical_families())
