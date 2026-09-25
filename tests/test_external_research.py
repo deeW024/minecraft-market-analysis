@@ -300,6 +300,80 @@ def test_dawn_is_current_rank7_competitor_and_feather_is_transition_evidence():
     assert any("Feather is now Dawn" in row["observation"] for row in cited)
 
 
+def test_competitor_relation_evidence_must_be_referenced_by_current_same_family_entity():
+    capture = _resolved_capture_with_required_queries()
+    family_id = research.PILOT_FAMILY_IDS[0]
+    capture["opened_pages"].append({
+        "capture_id": "page-relation",
+        "family_id": family_id,
+        "query_ref": "q-1-1",
+        "source_url": "https://example.org/competitor",
+        "source_title": "Current competitor",
+        "source_type": "PRIMARY_PRODUCT",
+        "retrieved_at": "2026-09-24T13:00:00Z",
+    })
+    capture["evidence"].append({
+        "capture_id": "ev-relation",
+        "family_id": family_id,
+        "page_ref": "page-relation",
+        "claim_type": "COMPETITOR_RELATION",
+        "observation": "The current product overlaps the resolved concept.",
+    })
+
+    orphan_payload = research._normalize_capture(capture, _canonical_families())
+    orphan_qa = research._validate_payload(orphan_payload, _canonical_families())
+    relation_evidence_id = next(
+        item["evidence_id"] for item in orphan_payload["external_evidence"]
+        if item["observation"] == "The current product overlaps the resolved concept."
+    )
+    assert orphan_qa["orphan_competitor_relation_evidence_ids"] == [relation_evidence_id]
+    assert not orphan_qa["all_competitor_relation_evidence_referenced_by_current_same_family_competitor"]
+    assert any("current same-family competitor entity" in error for error in orphan_qa["errors"])
+
+    cross_family_payload = {
+        table: [dict(row) for row in rows]
+        for table, rows in orphan_payload.items()
+    }
+    cross_family_entity = {
+        "competitor_id": "cmp-cross-family",
+        "family_id": research.PILOT_FAMILY_IDS[1],
+        "consensus_rank": 2,
+        "entity_name": "Wrong-family competitor",
+        "canonical_url": "https://example.org/competitor",
+        "relation_type": "DIRECT",
+        "product_type": "Minecraft mod",
+        "platform_or_ecosystem": "Minecraft",
+        "pricing_model": None,
+        "price_amount": None,
+        "currency": None,
+        "maintenance_status": None,
+        "feature_summary": None,
+        "evidence_ids": [relation_evidence_id],
+    }
+    cross_family_payload["competitor_entities"].append(cross_family_entity)
+    rank2_pack = next(row for row in cross_family_payload["family_research_packs"] if row["consensus_rank"] == 2)
+    rank2_pack["direct_competitor_ids"] = [cross_family_entity["competitor_id"]]
+    rank2_pack["direct_competitor_count"] = 1
+    cross_family_qa = research._validate_payload(cross_family_payload, _canonical_families())
+    assert relation_evidence_id in cross_family_qa["orphan_competitor_relation_evidence_ids"]
+
+    capture["competitors"].append({
+        "capture_id": "current-competitor",
+        "family_id": family_id,
+        "entity_name": "Current competitor",
+        "canonical_url": "https://example.org/competitor",
+        "relation_type": "DIRECT",
+        "product_type": "Minecraft mod",
+        "platform_or_ecosystem": "Minecraft",
+        "evidence_refs": ["ev-relation"],
+    })
+    retained_payload = research._normalize_capture(capture, _canonical_families())
+    retained_qa = research._validate_payload(retained_payload, _canonical_families())
+    assert retained_qa["status"] == "PASS"
+    assert retained_qa["orphan_competitor_relation_evidence_ids"] == []
+    assert retained_qa["all_competitor_relation_evidence_referenced_by_current_same_family_competitor"]
+
+
 def test_pack_copies_every_yee46_baseline_field_without_recalculation():
     canonical = _canonical_families()
     payload = research._normalize_capture(_capture(), canonical)

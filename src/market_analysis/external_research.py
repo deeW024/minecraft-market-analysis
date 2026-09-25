@@ -654,6 +654,22 @@ def _validate_payload(
             errors.append(f"competitor feature summary lacks FEATURE evidence: {row['competitor_id']}")
         if row["maintenance_status"] is not None and "MAINTENANCE" not in claims:
             errors.append(f"competitor maintenance lacks MAINTENANCE evidence: {row['competitor_id']}")
+    referenced_current_relations = {
+        (entity["family_id"], evidence_id)
+        for entity in entities
+        for evidence_id in entity["evidence_ids"]
+        if evidence_id in evidence_by_id and evidence_by_id[evidence_id]["claim_type"] == "COMPETITOR_RELATION"
+    }
+    orphan_competitor_relation_evidence_ids = sorted(
+        row["evidence_id"] for row in evidence
+        if row["claim_type"] == "COMPETITOR_RELATION"
+        and (row["family_id"], row["evidence_id"]) not in referenced_current_relations
+    )
+    for evidence_id in orphan_competitor_relation_evidence_ids:
+        errors.append(
+            "COMPETITOR_RELATION evidence is not referenced by a current same-family competitor entity: "
+            f"{evidence_id}"
+        )
     if any(len([e for e in entities if e["family_id"] == family_id and e["relation_type"] == "DIRECT"]) > 5 for family_id in seed_by_id):
         errors.append("a family exceeds the five DIRECT competitor limit")
 
@@ -764,6 +780,8 @@ def _validate_payload(
     return {
         "status": "PASS" if not errors else "FAIL",
         "errors": errors,
+        "orphan_competitor_relation_evidence_ids": orphan_competitor_relation_evidence_ids,
+        "all_competitor_relation_evidence_referenced_by_current_same_family_competitor": not orphan_competitor_relation_evidence_ids,
         "expected_counts": expected_counts,
         "research_status_counts": dict(sorted(Counter(row["research_status"] for row in families).items())),
         "coverage_status_counts": dict(sorted(Counter(row["research_coverage_status"] for row in families).items())),
@@ -913,6 +931,7 @@ def _report(qa: Mapping[str, Any]) -> str:
         f"- Source-type counts: `{_canonical_json(details['source_type_counts'])}`.",
         f"- Relation counts: `{_canonical_json(details['relation_type_counts'])}`.",
         f"- Claim-type counts: `{_canonical_json(details['claim_type_counts'])}`.",
+        f"- Current competitor-relation evidence references: {details['referenced_current_competitor_relation_evidence_count']}/{details['competitor_relation_evidence_count']}; orphan IDs: `{_canonical_json(details['orphan_competitor_relation_evidence_ids'])}`.",
         f"- Opened-page counts by rank: `{_canonical_json(details['opened_page_count_by_rank'])}`.",
         f"- Executed queries by rank: `{_canonical_json(details['query_count_by_rank'])}`.",
         f"- Required lifecycle/identity and pain-point query purposes by resolved rank: `{_canonical_json(details['query_purpose_presence_by_rank'])}`.",
@@ -1016,6 +1035,9 @@ def build_pilot(
         ),
         "research_budgets_respected": all(count <= 10 for count in validation["query_count_by_family"].values()) and all(count <= 15 for count in opened_page_count_by_rank.values()),
         "evidence_and_field_references_reconcile": not validation["errors"],
+        "all_competitor_relation_evidence_referenced_by_current_same_family_competitor": validation[
+            "all_competitor_relation_evidence_referenced_by_current_same_family_competitor"
+        ],
         "no_mixed_currency_or_unsupported_aggregations": not any("mixed-currency" in error for error in validation["errors"]),
         "no_rank_change_or_forbidden_output": all(row.get("triage_bucket") == "ADVANCE_RESEARCH" for row in payload["family_research_packs"]) and not any("opportunity_score" in key or "recommendation" in key for table in payload.values() for row in table for key in row),
         "coverage_labels_follow_declared_rules": all(row["research_coverage_status"] == _coverage_status(row["research_status"], row["evidence_count"], row["distinct_domain_count"], row["primary_evidence_count"] > 0, row["direct_competitor_count"] > 0) for row in payload["family_research_packs"]),
@@ -1049,6 +1071,9 @@ def build_pilot(
             "coverage_status_counts": validation["coverage_status_counts"],
             "source_type_counts": validation["source_type_counts"],
             "claim_type_counts": validation["claim_type_counts"],
+            "competitor_relation_evidence_count": validation["claim_type_counts"].get("COMPETITOR_RELATION", 0),
+            "referenced_current_competitor_relation_evidence_count": validation["claim_type_counts"].get("COMPETITOR_RELATION", 0) - len(validation["orphan_competitor_relation_evidence_ids"]),
+            "orphan_competitor_relation_evidence_ids": validation["orphan_competitor_relation_evidence_ids"],
             "relation_type_counts": validation["relation_type_counts"],
             "query_count_by_family": validation["query_count_by_family"],
             "query_count_by_rank": validation["query_count_by_rank"],
