@@ -29,6 +29,51 @@ def _canonical_families():
     return rows
 
 
+def _canonical_families_100():
+    rows = _canonical_families()
+    for rank in range(11, 101):
+        family_id = f"family_test_{rank:03d}"
+        row = {column: None for column in research.PACK_BASE_COLUMNS}
+        row.update({
+            "family_id": family_id,
+            "consensus_rank": rank,
+            "canonical_topic_key": f"topic {rank}",
+            "member_topic_keys": [f"topic {rank}"],
+            "aliases": [],
+            "candidate_classes": ["overlap"],
+            "consensus_score": 1.0,
+            "balanced_rank": rank,
+            "demand_first_rank": rank,
+            "whitespace_first_rank": rank,
+            "source_presence": ["modrinth"],
+            "triage_bucket": "ADVANCE_RESEARCH",
+        })
+        rows.append(row)
+    return rows
+
+
+def _capture_for_families(families):
+    capture = {"queries": [], "opened_pages": [], "evidence": [], "competitors": [], "families": []}
+    for family in families:
+        rank = family["consensus_rank"]
+        family_id = family["family_id"]
+        for number in range(1, 4):
+            capture["queries"].append({
+                "capture_id": f"q-{rank}-{number}",
+                "family_id": family_id,
+                "query_text": f"distinct query {rank} {number}",
+                "issued_at": f"2026-09-{(rank % 24) + 1:02d}T12:{rank % 60:02d}:{number:02d}Z",
+                "purpose": "identity discovery",
+                "result_action": "No opened result retained",
+            })
+        capture["families"].append({
+            "family_id": family_id,
+            "research_status": "UNRESOLVED",
+            "research_notes": "Three distinct public searches did not establish a coherent concept.",
+        })
+    return capture
+
+
 def _capture():
     families = _canonical_families()
     return {
@@ -140,6 +185,23 @@ def test_unresolved_family_requires_three_distinct_search_queries():
     normalized = research._normalize_capture(capture, _canonical_families())
     qa = research._validate_payload(normalized, _canonical_families())
     assert any("lacks three query attempts" in error for error in qa["errors"])
+
+
+def test_authorized_final_family_set_supports_exactly_100_and_preserves_accepted_pilot_rows():
+    canonical = _canonical_families_100()
+    pilot_capture = _capture_for_families(canonical[:10])
+    final_capture = _capture_for_families(canonical)
+    pilot_payload = research._normalize_capture(pilot_capture, canonical)
+    final_payload = research._normalize_capture(final_capture, canonical, canonical)
+    qa = research._validate_payload(final_payload, canonical, canonical)
+
+    assert qa["status"] == "PASS"
+    assert len(final_payload["family_research_packs"]) == 100
+    assert [row["consensus_rank"] for row in final_payload["family_research_packs"]] == list(range(1, 101))
+    assert all(
+        [row for row in final_payload[table] if row["consensus_rank"] <= 10] == pilot_payload[table]
+        for table in research.EXPORT_TABLES
+    )
 
 
 def _resolved_capture_with_required_queries():

@@ -2,7 +2,7 @@
 
 Schema version: `yee-47-external-market-evidence-v0.1`
 
-Pilot authorization: consensus ranks 1–10 only. The YEE-46 shortlist and analysis database are immutable, read-only inputs.
+Authorization stages: the accepted pilot covered consensus ranks 1–10; the supervisor-authorized final stage extends the same v0.1 contract to ranks 1–100. This changes no fields, null semantics, or table definitions. The YEE-46 shortlist and analysis database remain immutable, read-only inputs.
 
 ## Tables and exports
 

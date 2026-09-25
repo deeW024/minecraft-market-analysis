@@ -257,8 +257,11 @@ def _resolve_refs(
 
 def _normalize_capture(
     capture: Mapping[str, Any], canonical_families: Sequence[Mapping[str, Any]],
+    authorized_families: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
-    by_family = {row["family_id"]: row for row in canonical_families[:10]}
+    selected_families = list(authorized_families or canonical_families[:10])
+    selected_ids = [row["family_id"] for row in selected_families]
+    by_family = {row["family_id"]: row for row in selected_families}
     allowed_ids = set(by_family)
     queries: list[dict[str, Any]] = []
     query_capture_to_id: dict[str, str] = {}
@@ -266,7 +269,7 @@ def _normalize_capture(
     for sequence, raw in enumerate(capture.get("queries", []), 1):
         family_id = raw.get("family_id")
         if family_id not in allowed_ids:
-            raise ExternalResearchInputError(f"query outside authorized pilot: {family_id}")
+            raise ExternalResearchInputError(f"query outside authorized family set: {family_id}")
         capture_id = raw.get("capture_id")
         if not capture_id or capture_id in query_capture_to_id:
             raise ExternalResearchInputError("research query capture_id must be present and unique")
@@ -292,7 +295,7 @@ def _normalize_capture(
     for raw in capture.get("opened_pages", []):
         family_id = raw.get("family_id")
         if family_id not in allowed_ids:
-            raise ExternalResearchInputError(f"opened source page outside authorized pilot: {family_id}")
+            raise ExternalResearchInputError(f"opened source page outside authorized family set: {family_id}")
         capture_id = raw.get("capture_id")
         if not capture_id or capture_id in page_capture_to_row:
             raise ExternalResearchInputError("opened-page capture_id must be present and unique")
@@ -326,7 +329,7 @@ def _normalize_capture(
     for raw in capture.get("evidence", []):
         family_id = raw.get("family_id")
         if family_id not in allowed_ids:
-            raise ExternalResearchInputError(f"evidence outside authorized pilot: {family_id}")
+            raise ExternalResearchInputError(f"evidence outside authorized family set: {family_id}")
         capture_id = raw.get("capture_id")
         if not capture_id or capture_id in capture_to_evidence:
             raise ExternalResearchInputError("evidence capture_id must be present and unique")
@@ -393,7 +396,7 @@ def _normalize_capture(
     for raw in capture.get("competitors", []):
         family_id = raw.get("family_id")
         if family_id not in allowed_ids:
-            raise ExternalResearchInputError(f"competitor outside authorized pilot: {family_id}")
+            raise ExternalResearchInputError(f"competitor outside authorized family set: {family_id}")
         if raw.get("relation_type") not in RELATION_TYPES:
             raise ExternalResearchInputError(f"invalid competitor relation for {raw.get('capture_id')}")
         capture_id = raw.get("capture_id")
@@ -437,8 +440,8 @@ def _normalize_capture(
             raise ExternalResearchInputError(f"competitor entity_name required: {capture_id}")
 
     packs_by_id = {row.get("family_id"): row for row in capture.get("families", [])}
-    if set(packs_by_id) != allowed_ids or len(capture.get("families", [])) != 10:
-        raise ExternalResearchInputError("capture must contain exactly one family research record for each pilot identity")
+    if set(packs_by_id) != allowed_ids or len(capture.get("families", [])) != len(selected_ids):
+        raise ExternalResearchInputError("capture must contain exactly one family research record for each authorized identity")
     evidence_by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
     entities_by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in evidence:
@@ -450,7 +453,7 @@ def _normalize_capture(
         return _resolve_refs(raw_refs or [], capture_to_evidence, evidence_by_id, family_id)
 
     packs: list[dict[str, Any]] = []
-    for family_id in PILOT_FAMILY_IDS:
+    for family_id in selected_ids:
         seed = by_family[family_id]
         raw = packs_by_id[family_id]
         status = raw.get("research_status")
@@ -591,20 +594,23 @@ def _coverage_status(status: str, evidence_count: int, domain_count: int, has_pr
 
 def _validate_payload(
     payload: Mapping[str, Sequence[Mapping[str, Any]]], canonical_families: Sequence[Mapping[str, Any]],
+    authorized_families: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     families = list(payload["family_research_packs"])
     evidence = list(payload["external_evidence"])
     entities = list(payload["competitor_entities"])
     queries = list(payload["research_queries"])
     errors: list[str] = []
-    seed_by_id = {row["family_id"]: row for row in canonical_families[:10]}
+    selected_families = list(authorized_families or canonical_families[:10])
+    selected_ids = [row["family_id"] for row in selected_families]
+    seed_by_id = {row["family_id"]: row for row in selected_families}
     pack_by_id = {row["family_id"]: row for row in families}
     evidence_by_id = {row["evidence_id"]: row for row in evidence}
     query_by_id = {row["query_id"]: row for row in queries}
     entity_by_id = {row["competitor_id"]: row for row in entities}
 
-    if len(families) != 10 or set(pack_by_id) != set(PILOT_FAMILY_IDS):
-        errors.append("family set is not exactly the authorized ranks 1..10")
+    if len(families) != len(selected_ids) or set(pack_by_id) != set(selected_ids):
+        errors.append("family set does not exactly match the authorized identity set")
     if len(evidence_by_id) != len(evidence) or len(query_by_id) != len(queries) or len(entity_by_id) != len(entities):
         errors.append("duplicate primary keys in normalized rows")
     if len({(row["family_id"], row["canonical_url"], row["claim_type"], " ".join(row["observation"].casefold().split())) for row in evidence}) != len(evidence):
@@ -761,7 +767,7 @@ def _validate_payload(
 
     errors = sorted(set(errors))
     expected_counts = {
-        "family_research_packs": 10,
+        "family_research_packs": len(selected_ids),
         "external_evidence": len(evidence),
         "competitor_entities": len(entities),
         "research_queries": len(queries),
@@ -788,14 +794,14 @@ def _validate_payload(
         "source_type_counts": dict(sorted(Counter(row["source_type"] for row in evidence).items())),
         "claim_type_counts": dict(sorted(Counter(row["claim_type"] for row in evidence).items())),
         "relation_type_counts": dict(sorted(Counter(row["relation_type"] for row in entities).items())),
-        "query_count_by_family": {family_id: len(queries_by_family.get(family_id, [])) for family_id in PILOT_FAMILY_IDS},
+        "query_count_by_family": {family_id: len(queries_by_family.get(family_id, [])) for family_id in selected_ids},
         "query_count_by_rank": query_count_by_rank,
         "query_purpose_count_by_family": {
             family_id: dict(sorted(Counter(row["purpose"] for row in queries_by_family.get(family_id, [])).items()))
-            for family_id in PILOT_FAMILY_IDS
+            for family_id in selected_ids
         },
         "query_purpose_presence_by_rank": query_purpose_presence_by_rank,
-        "evidence_count_by_family": {family_id: len(evidence_by_family.get(family_id, [])) for family_id in PILOT_FAMILY_IDS},
+        "evidence_count_by_family": {family_id: len(evidence_by_family.get(family_id, [])) for family_id in selected_ids},
     }
 
 
@@ -859,7 +865,7 @@ def _write_database(path: Path, payload: Mapping[str, Sequence[Mapping[str, Any]
 
 def _write_dataset_files(
     output: Path, payload: Mapping[str, Sequence[Mapping[str, Any]]], metadata: Mapping[str, Any],
-    capture: Mapping[str, Any],
+    capture: Mapping[str, Any], *, stage: str = "PILOT",
 ) -> list[Path]:
     output.mkdir(parents=True, exist_ok=True)
     database = output / "external_market_research.sqlite"
@@ -877,7 +883,7 @@ def _write_dataset_files(
             for row in payload[table]:
                 writer.writerow({column: _csv_value(row.get(column)) for column in columns})
         paths.extend((jsonl, csv_path))
-    capture_path = output / "PILOT_CAPTURE.json"
+    capture_path = output / f"{stage}_CAPTURE.json"
     capture_path.write_text(_canonical_json(capture) + "\n", encoding="utf-8", newline="\n")
     paths.append(capture_path)
     schema_path = output / "EXTERNAL_RESEARCH_SCHEMA.md"
@@ -908,22 +914,28 @@ def _output_checks(output: Path, payload: Mapping[str, Sequence[Mapping[str, Any
         connection.close()
 
 
-def _report(qa: Mapping[str, Any]) -> str:
+def _report(qa: Mapping[str, Any], *, stage: str = "PILOT") -> str:
     details = qa["details"]
+    is_final = stage == "FINAL"
+    authorized_ranks = range(1, 101) if is_final else range(1, 11)
+    report_title = "Final Report" if is_final else "Pilot Report"
+    coverage_title = "Final coverage" if is_final else "Pilot coverage"
+    handoff = "EXTERNAL_EVIDENCE_READY_FOR_SUPERVISOR_REVIEW" if is_final else "EXTERNAL_EVIDENCE_PILOT_READY_FOR_SUPERVISOR_REVIEW"
+    scope_note = "Ranks 1..10 are the accepted pilot and were preserved unchanged." if is_final else "No ranks 11..100 were researched."
     lines = [
-        "# YEE-47 External Market Evidence v0 — Pilot Report",
+        f"# YEE-47 External Market Evidence v0 — {report_title}",
         "",
         f"Status: **{qa['status']}**",
         "",
         "## Scope and inputs",
         "",
-        f"- Authorized family ranks: {', '.join(str(rank) for rank in range(1, 11))}; no ranks 11..100 were researched.",
+        f"- Authorized consensus ranks: {', '.join(str(rank) for rank in authorized_ranks)}. {scope_note}",
         f"- Accepted YEE-46 shortlist SHA-256: `{qa['inputs']['shortlist_sha256']}`.",
         f"- Accepted YEE-46 analysis DB SHA-256: `{qa['inputs']['analysis_db_sha256']}` (read-only).",
         f"- Input SHA/count/identity unchanged: {qa['checks']['canonical_inputs_unchanged']}.",
         "- No re-ranking, new opportunity score, product recommendation, revenue/TAM estimate, YEE-24 API/token work, or auth bypass was performed.",
         "",
-        "## Pilot coverage",
+        f"## {coverage_title}",
         "",
         f"- Research packs: {details['row_counts']['family_research_packs']}; evidence: {details['row_counts']['external_evidence']}; competitor relationships: {details['row_counts']['competitor_entities']}; searches: {details['row_counts']['research_queries']}.",
         f"- Research statuses: `{_canonical_json(details['research_status_counts'])}`.",
@@ -950,25 +962,30 @@ def _report(qa: Mapping[str, Any]) -> str:
         "",
         f"- All acceptance gates: {qa['status']}; errors: {len(qa['errors'])}.",
         f"- SQLite integrity/FK, row reconciliation, and deterministic replay: {details['output_checks']['sqlite_integrity_ok']}/{details['output_checks']['foreign_key_check_ok']}/{qa['checks']['deterministic_replay_byte_identical']}.",
-        "- Handoff state: `EXTERNAL_EVIDENCE_PILOT_READY_FOR_SUPERVISOR_REVIEW`; supervisor review is pending and ranks 11..100 remain unauthorized.",
+        f"- Handoff state: `{handoff}`; supervisor review is pending.",
         "",
     ))
     return "\n".join(lines)
 
 
-def _write_final(output: Path, qa: dict[str, Any]) -> dict[str, Any]:
+def _write_final(output: Path, qa: dict[str, Any], *, stage: str = "PILOT") -> dict[str, Any]:
     (output / "QA_RESULT.json").write_text(_canonical_json(qa) + "\n", encoding="utf-8", newline="\n")
-    (output / "PILOT_REPORT.md").write_text(_report(qa), encoding="utf-8", newline="\n")
+    report_name = "FINAL_REPORT.md" if stage == "FINAL" else "PILOT_REPORT.md"
+    (output / report_name).write_text(_report(qa, stage=stage), encoding="utf-8", newline="\n")
     files = [path for path in output.iterdir() if path.is_file() and path.name != "DATASET_MANIFEST.json"]
     manifest = {
         "work_order": WORK_ORDER,
         "status": qa["status"],
         "schema_version": SCHEMA_VERSION,
         "baseline_commit": BASELINE_COMMIT,
-        "authorized_scope": {"stage": "PILOT", "consensus_ranks": list(range(1, 11)), "ranks_11_100_authorized": False},
+        "authorized_scope": {
+            "stage": stage,
+            "consensus_ranks": list(range(1, 101)) if stage == "FINAL" else list(range(1, 11)),
+            "ranks_11_100_authorized": stage == "FINAL",
+        },
         "inputs": qa["inputs"],
         "row_counts": qa["details"]["row_counts"],
-        "artifact_hash_note": "Manifest lists every pilot deliverable except itself to avoid recursive hashing.",
+        "artifact_hash_note": "Manifest lists every dataset deliverable except itself to avoid recursive hashing.",
         "artifacts": [
             {"path": path.name, "bytes": path.stat().st_size, "sha256": _sha256_file(path)}
             for path in sorted(files, key=lambda item: item.name)
@@ -1093,4 +1110,127 @@ def build_pilot(
     manifest = _write_final(output, qa)
     if status != "PASS":
         raise RuntimeError(f"YEE-47 pilot QA failed; inspect {output / 'QA_RESULT.json'}")
+    return {"status": status, "output_dir": output, "qa": qa, "manifest": manifest}
+
+
+def build_final(
+    shortlist_path: str | Path, analysis_db_path: str | Path, capture_path: str | Path,
+    accepted_pilot_capture_path: str | Path, output_dir: str | Path,
+) -> dict[str, Any]:
+    output = Path(output_dir).resolve()
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f"output directory is not empty: {output}")
+    canonical_families, hashes_before = _load_accepted_inputs(shortlist_path, analysis_db_path)
+    capture = json.loads(Path(capture_path).resolve().read_text(encoding="utf-8"))
+    accepted_pilot_capture = json.loads(Path(accepted_pilot_capture_path).resolve().read_text(encoding="utf-8"))
+    payload = _normalize_capture(capture, canonical_families, canonical_families)
+    validation = _validate_payload(payload, canonical_families, canonical_families)
+    accepted_pilot_payload = _normalize_capture(accepted_pilot_capture, canonical_families)
+    preserved_pilot_rows = all(
+        [row for row in payload[table] if row["consensus_rank"] <= 10] == accepted_pilot_payload[table]
+        for table in EXPORT_TABLES
+    )
+    opened_page_count_by_rank = {
+        str(seed["consensus_rank"]): len({
+            canonicalize_url(str(page["source_url"])) for page in capture.get("opened_pages", [])
+            if page.get("family_id") == seed["family_id"]
+        })
+        for seed in canonical_families
+    }
+
+    metadata = {
+        "work_order": WORK_ORDER,
+        "schema_version": SCHEMA_VERSION,
+        "baseline_commit": BASELINE_COMMIT,
+        "accepted_shortlist_sha256": hashes_before["shortlist"],
+        "accepted_analysis_db_sha256": hashes_before["analysis_db"],
+        "authorization": "FINAL_CONSENSUS_RANKS_1_TO_100",
+    }
+    output.mkdir(parents=True, exist_ok=True)
+    artifact_paths = _write_dataset_files(output, payload, metadata, capture, stage="FINAL")
+    replay_identical = False
+    with tempfile.TemporaryDirectory(prefix="yee47-final-replay-") as replay_temp:
+        replay_path = Path(replay_temp)
+        replay_families, replay_hashes = _load_accepted_inputs(shortlist_path, analysis_db_path)
+        replay_payload = _normalize_capture(capture, replay_families, replay_families)
+        replay_paths = _write_dataset_files(replay_path, replay_payload, metadata, capture, stage="FINAL")
+        actual = {path.name: _sha256_file(path) for path in artifact_paths}
+        replay = {path.name: _sha256_file(path) for path in replay_paths}
+        replay_identical = actual == replay and replay_hashes == hashes_before and replay_payload == payload
+
+    hashes_after = {
+        "shortlist": _sha256_file(Path(shortlist_path).resolve()),
+        "analysis_db": _sha256_file(Path(analysis_db_path).resolve()),
+    }
+    output_checks = _output_checks(output, payload)
+    counts = {table: len(rows) for table, rows in payload.items()}
+    checks = {
+        "accepted_input_hashes_match": hashes_before == {"shortlist": ACCEPTED_SHORTLIST_SHA256, "analysis_db": ACCEPTED_ANALYSIS_DB_SHA256},
+        "canonical_inputs_unchanged": hashes_after == hashes_before,
+        "exact_authorized_final_family_set": len(payload["family_research_packs"]) == 100 and [row["family_id"] for row in payload["family_research_packs"]] == [row["family_id"] for row in canonical_families],
+        "exact_final_ranks_1_to_100": [row["consensus_rank"] for row in payload["family_research_packs"]] == list(range(1, 101)),
+        "accepted_pilot_ranks_1_to_10_unchanged": preserved_pilot_rows,
+        "all_final_families_have_search_provenance": all(validation["query_count_by_family"].values()),
+        "resolved_families_have_required_research_passes": all(
+            all(validation["query_purpose_presence_by_rank"].get(str(row["consensus_rank"]), {}).values())
+            for row in payload["family_research_packs"] if row["research_status"] == "RESOLVED"
+        ),
+        "research_budgets_respected": all(count <= 10 for count in validation["query_count_by_family"].values()) and all(count <= 15 for count in opened_page_count_by_rank.values()),
+        "evidence_and_field_references_reconcile": not validation["errors"],
+        "all_competitor_relation_evidence_referenced_by_current_same_family_competitor": validation[
+            "all_competitor_relation_evidence_referenced_by_current_same_family_competitor"
+        ],
+        "no_mixed_currency_or_unsupported_aggregations": not any("mixed-currency" in error for error in validation["errors"]),
+        "no_rank_change_or_forbidden_output": all(row.get("triage_bucket") == "ADVANCE_RESEARCH" for row in payload["family_research_packs"]) and not any("opportunity_score" in key or "recommendation" in key for table in payload.values() for row in table for key in row),
+        "coverage_labels_follow_declared_rules": all(row["research_coverage_status"] == _coverage_status(row["research_status"], row["evidence_count"], row["distinct_domain_count"], row["primary_evidence_count"] > 0, row["direct_competitor_count"] > 0) for row in payload["family_research_packs"]),
+        "sqlite_integrity_check": output_checks["sqlite_integrity_ok"],
+        "sqlite_foreign_key_check": output_checks["foreign_key_check_ok"],
+        "sqlite_jsonl_csv_counts_and_schema_reconcile": output_checks["table_counts_match"] and output_checks["table_columns_match_schema"],
+        "deterministic_replay_byte_identical": replay_identical,
+        "opened_source_pages_registered_and_within_budget": all(0 <= count <= 15 for count in opened_page_count_by_rank.values()) and all(evidence["query_id"] is not None for evidence in payload["external_evidence"]),
+    }
+    status = "PASS" if validation["status"] == "PASS" and all(checks.values()) else "FAIL"
+    qa = {
+        "work_order": WORK_ORDER,
+        "status": status,
+        "schema_version": SCHEMA_VERSION,
+        "stage": "FINAL",
+        "inputs": {
+            "shortlist_file": Path(shortlist_path).name,
+            "shortlist_sha256": hashes_before["shortlist"],
+            "analysis_db_file": Path(analysis_db_path).name,
+            "analysis_db_sha256": hashes_before["analysis_db"],
+            "sha256_after": hashes_after,
+            "baseline_commit": BASELINE_COMMIT,
+        },
+        "checks": checks,
+        "errors": validation["errors"],
+        "details": {
+            "row_counts": counts,
+            "research_status_counts": validation["research_status_counts"],
+            "coverage_status_counts": validation["coverage_status_counts"],
+            "source_type_counts": validation["source_type_counts"],
+            "claim_type_counts": validation["claim_type_counts"],
+            "competitor_relation_evidence_count": validation["claim_type_counts"].get("COMPETITOR_RELATION", 0),
+            "referenced_current_competitor_relation_evidence_count": validation["claim_type_counts"].get("COMPETITOR_RELATION", 0) - len(validation["orphan_competitor_relation_evidence_ids"]),
+            "orphan_competitor_relation_evidence_ids": validation["orphan_competitor_relation_evidence_ids"],
+            "relation_type_counts": validation["relation_type_counts"],
+            "query_count_by_family": validation["query_count_by_family"],
+            "query_count_by_rank": validation["query_count_by_rank"],
+            "query_purpose_count_by_family": validation["query_purpose_count_by_family"],
+            "query_purpose_presence_by_rank": validation["query_purpose_presence_by_rank"],
+            "opened_page_count_by_rank": opened_page_count_by_rank,
+            "evidence_count_by_family": validation["evidence_count_by_family"],
+            "family_summaries": [
+                {key: row[key] for key in ("consensus_rank", "canonical_topic_key", "research_status", "research_coverage_status", "research_notes")}
+                for row in payload["family_research_packs"]
+            ],
+            "output_checks": output_checks,
+            "dataset_artifact_sha256": dict(sorted((path.name, _sha256_file(path)) for path in artifact_paths)),
+        },
+        "authorization": {"consensus_ranks": list(range(1, 101)), "accepted_pilot_ranks_preserved": preserved_pilot_rows},
+    }
+    manifest = _write_final(output, qa, stage="FINAL")
+    if status != "PASS":
+        raise RuntimeError(f"YEE-47 final dataset QA failed; inspect {output / 'QA_RESULT.json'}")
     return {"status": status, "output_dir": output, "qa": qa, "manifest": manifest}
