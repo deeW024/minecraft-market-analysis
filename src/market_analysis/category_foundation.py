@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 WORK_ORDER = "YEE-61"
 SCHEMA_VERSION = "yee-61-category-first-foundation-v0.1"
-SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.3"
+SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.4"
 ASSIGNMENT_VERSION = "yee-61-category-assignment-v0.1"
 TAXONOMY_VERSION = "yee-61-functional-category-taxonomy-v0.1"
 YEE60_CLASSIFIER_VERSION = "yee-60-source-native-plugin-classifier-v0.1"
@@ -35,7 +35,7 @@ KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES = (
     "voxel:1139", "voxel:1238", "voxel:1386", "voxel:4400", "voxel:4382",
     "voxel:416", "voxel:4698", "voxel:5456", "voxel:6353", "voxel:6356",
     "voxel:6606", "voxel:6868", "voxel:6873", "voxel:6874", "voxel:6875",
-    "voxel:6876", "voxel:7237", "voxel:8176",
+    "voxel:6876", "voxel:7237", "voxel:8176", "voxel:2590", "voxel:6586",
 )
 
 PLUGIN_PRODUCT_CONFIRMED = "PLUGIN_PRODUCT_CONFIRMED"
@@ -248,7 +248,20 @@ _ASSET_RULES = (
 )
 
 _NON_PLUGIN_PRODUCT_CUE_PATTERN = (
-    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?|furnitures?|decor(?:ations?)?|props?|textures?|skins?)\b"
+)
+_TITLE_LEVEL_PRODUCT_FORM_PATTERN = (
+    r"\b(?:configs?|configurations?|setups?|models?|furnitures?|decor(?:ations?)?|props?|textures?|skins?|"
+    r"(?:resource|texture)\s+packs?)\b(?=\s*(?:$|[|+,:/–—-])|\s+(?:addons?|add-ons?|packs?|bundles?|assets?)\b)"
+)
+_SUMMARY_PRODUCT_FORM_PATTERN = (
+    r"^\s*(?:(?:a|an|the|free|premium|custom)\s+)?[^.!?\n]{0,100}?"
+    r"\b(?:configs?|configurations?|setups?)\b\s*(?:$|[|+])"
+)
+_PRODUCT_FORM_FEATURE_CONTEXT = re.compile(
+    r"\b(?:adds?|allows?|lets?|provides?|manages?|edits?|exposes?|synchroni[sz]es?|syncs?|includes?|"
+    r"supports?|offers?|creates?|configures?|has|comes\s+with|works\s+with)\b",
+    re.IGNORECASE,
 )
 _REVERSE_PLUGIN_PRODUCT_PATTERN = (
     r"\bplugins?(?:['’]s)?\s+"
@@ -267,7 +280,7 @@ _EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
     ),
     (
         "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
-        r"\b(?:config(?:uration)?s?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+        r"\b(?:config(?:uration)?s?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?|furnitures?|decor(?:ations?)?|props?|textures?|skins?)\b"
         r"[^.!?\n]{0,100}\b(?:for|of|using|made\s+(?:completely\s+)?(?:for|using)|built\s+(?:for|using)|requires?)\s+"
         r"(?!(?:other|all|paper|spigot|bukkit|velocity|waterfall|purpur|fabric|forge)\s+plugins?\b)"
         r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b",
@@ -278,7 +291,7 @@ _EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
     ),
     (
         "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
-        r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+        r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?|furnitures?|decor(?:ations?)?|props?|textures?|skins?)\b"
         r"[^.!?\n]{0,100}\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b",
     ),
 )
@@ -305,7 +318,7 @@ _QA_SEMANTIC_CONTRADICTION_RULES = (
     r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
     r"[^.!?\n]{0,110}\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b",
 )
-_QA_PRODUCT_CUE = r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+_QA_PRODUCT_CUE = r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?|furnitures?|decor(?:ations?)?|props?|textures?|skins?)\b"
 _QA_CROSS_FIELD_DEPENDENCY = (
     r"\b(?:made\s+(?:completely\s+)?using|using|made\s+for|built\s+for|for|of|requires?)\s+"
     r"(?!(?:other|all|paper|spigot|bukkit|velocity|waterfall|purpur|fabric|forge)\s+plugins?\b)"
@@ -316,6 +329,24 @@ _QA_PLUGIN_BEHAVIOR_CONTEXT = (
     r"\b(?:adds?|allows?|lets?|provides?|enables?|prevents?|manages?|tracks?|controls?|"
     r"customi[sz]e(?:s|d|ing)?|synchroni[sz]e(?:s|d|ing)?|connects?|integrates?|automates?|"
     r"offers?|creates?|makes?|brings?|extends?|restricts?|tries\s+to\s+(?:bring|add|provide|create|make))\b"
+)
+_QA_TERMINAL_PRODUCT_FORM = (
+    r"(?:^|\s)(?:configs?|configurations?|setups?|models?|furnitures?|decor(?:ations?)?|props?|textures?|skins?|"
+    r"resource\s+packs?|texture\s+packs?)\s*(?:$|[|+,:/–—-])"
+)
+_QA_SUMMARY_PRODUCT_HEADING = (
+    r"^\s*(?:(?:a|an|the|free|premium|custom)\s+)?[^.!?\n]{0,100}"
+    r"\b(?:configs?|configurations?|setups?)\s*(?:$|[|+])"
+)
+_QA_SUMMARY_FEATURE_CONTEXT = re.compile(
+    r"\b(?:adds?|allows?|lets?|provides?|manages?|edits?|exposes?|synchroni[sz]es?|syncs?|includes?|"
+    r"supports?|offers?|creates?|configures?|has|comes\s+with|works\s+with)\b",
+    re.IGNORECASE,
+)
+_QA_CONTENT_DEPENDENCY = (
+    r"\b(?:furnitures?|decor(?:ations?)?|props?|textures?|skins?|models?|content\s+assets?)\b"
+    r"[^.!?\n]{0,120}\b(?:for|of|using|made\s+for|built\s+for|requires?)\s+"
+    r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b"
 )
 
 _DIRECT_PLUGIN_RULES = (
@@ -594,6 +625,31 @@ def _asset_form_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     return [unique[key] for key in sorted(unique)]
 
 
+def _title_level_product_form_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Recognize marketplace-style product nouns without treating features as products."""
+    found: list[dict[str, str]] = []
+    title = _text(row, "title")
+    title_match = re.search(_TITLE_LEVEL_PRODUCT_FORM_PATTERN, title, re.IGNORECASE)
+    if title_match:
+        found.append({
+            "reason_code": "TITLE_LEVEL_NON_PLUGIN_PRODUCT_FORM_CUE",
+            "field": "title",
+            "text_span": title_match.group(0).strip(),
+            "rule_pattern": "terminal_marketplace_product_form_noun",
+        })
+
+    summary = _text(row, "summary")
+    summary_match = re.search(_SUMMARY_PRODUCT_FORM_PATTERN, summary, re.IGNORECASE)
+    if summary_match and not _PRODUCT_FORM_FEATURE_CONTEXT.search(summary[:summary_match.end()]):
+        found.append({
+            "reason_code": "TITLE_LEVEL_NON_PLUGIN_PRODUCT_FORM_CUE",
+            "field": "summary",
+            "text_span": summary_match.group(0).strip(),
+            "rule_pattern": "summary_product_heading",
+        })
+    return found
+
+
 def _direct_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     for pattern in _DIRECT_PLUGIN_RULES:
@@ -674,6 +730,32 @@ def _independent_semantic_contradictions(row: Mapping[str, Any]) -> list[dict[st
                     if not title_has_product_cue and re.search(_QA_PLUGIN_BEHAVIOR_CONTEXT, context, re.IGNORECASE):
                         continue
                 found.append({"field": field, "text_span": match.group(0), "rule_pattern": pattern})
+
+    # These independent patterns scan marketplace-shaped title/summary forms;
+    # they do not reuse the classifier's product-form helper or decision labels.
+    title_form = re.search(_QA_TERMINAL_PRODUCT_FORM, raw_fields["title"], re.IGNORECASE)
+    if title_form:
+        found.append({
+            "field": "title",
+            "text_span": title_form.group(0).strip(),
+            "rule_pattern": "qa_terminal_marketplace_product_noun",
+        })
+    summary_form = re.search(_QA_SUMMARY_PRODUCT_HEADING, raw_fields["summary"], re.IGNORECASE)
+    if summary_form and not _QA_SUMMARY_FEATURE_CONTEXT.search(raw_fields["summary"][:summary_form.end()]):
+        found.append({
+            "field": "summary",
+            "text_span": summary_form.group(0).strip(),
+            "rule_pattern": "qa_summary_product_heading",
+        })
+    for field, text in raw_fields.items():
+        content_dependency = re.search(_QA_CONTENT_DEPENDENCY, text, re.IGNORECASE)
+        if content_dependency:
+            found.append({
+                "field": field,
+                "text_span": content_dependency.group(0),
+                "rule_pattern": "qa_plugin_dependent_content_product",
+            })
+
     cue_pattern = re.compile(_QA_PRODUCT_CUE, re.IGNORECASE)
     dependency_pattern = re.compile(_QA_CROSS_FIELD_DEPENDENCY, re.IGNORECASE)
     for product_field, dependency_field in (("title", "summary"), ("summary", "title")):
@@ -705,6 +787,7 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
         raise CategoryFoundationError("Product-form guard accepts only rows with retained YEE-60 positive evidence")
 
     asset_evidence = _asset_form_evidence(row)
+    title_product_form_evidence = _title_level_product_form_evidence(row)
     explicit_non_plugin_evidence = _explicit_non_plugin_product_evidence(row)
     direct_evidence = _direct_plugin_product_evidence(row)
     behavior_evidence = _server_behavior_evidence(row)
@@ -715,6 +798,22 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
         product_evidence = explicit_non_plugin_evidence + asset_evidence
         reasons = sorted({item["reason_code"] for item in product_evidence})
         confidence = "HIGH"
+    elif title_product_form_evidence and direct_evidence:
+        status = PLUGIN_PRODUCT_REVIEW
+        reasons = sorted({
+            "MIXED_TITLE_PRODUCT_FORM_AND_PLUGIN_MENTION",
+            *(item["reason_code"] for item in asset_evidence),
+        })
+        confidence = "LOW"
+        product_evidence = title_product_form_evidence + asset_evidence + direct_evidence
+    elif title_product_form_evidence:
+        status = OUT_OF_SCOPE_PRODUCT_FORM
+        reasons = sorted({
+            "OUT_OF_SCOPE_TITLE_LEVEL_PRODUCT_FORM",
+            *(item["reason_code"] for item in asset_evidence),
+        })
+        confidence = "HIGH"
+        product_evidence = title_product_form_evidence + asset_evidence
     elif asset_evidence and direct_evidence:
         status = PLUGIN_PRODUCT_REVIEW
         reasons = ["CONFLICTING_PLUGIN_AND_NON_PLUGIN_PRODUCT_FORM_EVIDENCE"]

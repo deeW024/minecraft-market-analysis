@@ -157,6 +157,29 @@ def _supervisor_blocker_rows():
     ]
 
 
+def _latest_supervisor_blocker_rows():
+    return [
+        (_row("1753", title="BentoBox DeluxeMenu Config", summary="7 Menus | Custom Command Arg Plugin | More soon..."), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("1801", title="⚡TAB ⚡ BEST CONFIG | EN |", summary="tab, plugin, config, hub, practice, pvp"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("2590", title="ItemsAdder Park Plus Furniture", summary="Park furniture Addon for ItemsAdder Plugin"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("4786", title="BoxPvP | Server Setup", summary="Villager Trades, Crates, Combat System, Tags, Custom Holograms, Clan System, Custom Plugin and More"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("5583", title="Plugin Tab And Scoreboard", summary="A Scoreboard And TAB Config"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("6352", title="SternalBoard Premium Config", summary="A Fancy Scoreboard Plugin for your Server | PlaceHolders, Color Gradients & More"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("6479", title="AxTrade Config", summary="Simple plugin to handle most dangeours situations!, With AxTrade make trading more safer!"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("6586", title="FREE Grim anticheat config", summary="Cazu Config | Prevent Falses | Easy to use | AutoBan system"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("7094", title="Spartan Anti Cheat Configuration", summary="plugin, anticheat, for, minecraft, server, cheat, prevention, hack, detection"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("9302", title="Mine Setup + Plugin - English", summary="Minecraft The Movie | Custom Textures | Pickaxe | Mine Ores | Quests | Tab | Shop | Upgrades | Menus"), foundation.PLUGIN_PRODUCT_REVIEW),
+    ]
+
+
+def _plugin_dependent_content_fixture():
+    return _row(
+        "content-textures",
+        title="Magical Fish",
+        summary="21 fishes, 6 squids and 5 snails textures for your custom fishing plugin!",
+    )
+
+
 @pytest.mark.parametrize("row", _supervisor_blocker_rows(), ids=lambda row: row["canonical_identity"])
 def test_supervisor_production_false_positives_are_explicitly_out_of_scope(row):
     result = foundation.classify_product_form(row, _eligible())
@@ -164,6 +187,25 @@ def test_supervisor_production_false_positives_are_explicitly_out_of_scope(row):
     assert result["product_scope_status"] == foundation.OUT_OF_SCOPE_PRODUCT_FORM
     assert any(code.startswith("OUT_OF_SCOPE_") for code in result["scope_reason_codes"])
     assert not any(item.get("reason_code") == "PLUGIN_PRODUCT_EXPLICIT_TEXT" for item in result["scope_evidence"])
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    _latest_supervisor_blocker_rows(),
+    ids=lambda value: value["canonical_identity"] if isinstance(value, dict) else str(value),
+)
+def test_latest_supervisor_title_product_form_blockers_never_confirm(row, expected):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == expected
+    assert result["product_scope_status"] != foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert any(
+        item.get("reason_code") == "TITLE_LEVEL_NON_PLUGIN_PRODUCT_FORM_CUE"
+        or item.get("reason_code") == "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT"
+        for item in result["scope_evidence"]
+    )
+    if expected == foundation.PLUGIN_PRODUCT_REVIEW:
+        assert "MIXED_TITLE_PRODUCT_FORM_AND_PLUGIN_MENTION" in result["scope_reason_codes"]
 
 
 @pytest.mark.parametrize(
@@ -207,8 +249,9 @@ def test_independent_raw_text_contradiction_scan_does_not_use_classifier_evidenc
         _row("qa-split-setup", title="Hangman DeluxeMenus Setup", summary="A Hangman game made completely using DeluxeMenus plugin."),
         _row("qa-split-modification", title="AdvancedBan Configuration", summary="A small message modification of the AdvancedBans plugin."),
         _row("qa-french-use", title="Configuration Quetes French", summary="Menu Deluxemenu qui utilise le plugin quest."),
+        *[row for row, _ in _latest_supervisor_blocker_rows()],
+        _plugin_dependent_content_fixture(),
     ],
-    ids=("explicit-negation", "dependent-product", "reverse-plugin-config", "plural-models", "split-setup", "split-modification", "french-plugin-use"),
 )
 def test_independent_qa_rejects_each_product_form_family_even_if_classifier_confirms(tmp_path, monkeypatch, row):
     input_db, input_jsonl = _write_fixture_input(tmp_path, [row])
@@ -265,7 +308,7 @@ def test_independent_qa_rejects_false_confirmed_scope_even_if_classifier_claims_
 
 
 def test_supervisor_false_positive_fixture_build_never_enters_category_memberships(tmp_path):
-    rows = _supervisor_blocker_rows()
+    rows = _supervisor_blocker_rows() + [row for row, _ in _latest_supervisor_blocker_rows()] + [_plugin_dependent_content_fixture()]
     input_db, input_jsonl = _write_fixture_input(tmp_path, rows)
     output_dir = tmp_path / "supervisor-fixtures"
 
@@ -276,7 +319,7 @@ def test_supervisor_false_positive_fixture_build_never_enters_category_membershi
     assert qa["row_counts"]["plugin_category_memberships"] == 0
     assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 0
     assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == len(rows)
-    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.3"
+    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.4"
     manifest = json.loads((output_dir / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
     assert manifest["scope_classifier_version"] == qa["scope_classifier_version"]
     assert qa["scope_classifier_version"] in (output_dir / "FINAL_REPORT.md").read_text(encoding="utf-8")
@@ -316,6 +359,29 @@ def test_true_plugin_product_and_config_behavior_controls_are_not_independent_co
 
     assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
     assert foundation._independent_semantic_contradictions(row) == []
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row("7426", title="HardnessControl", summary="Customise the hardness (destroyTime) of blocks through a plugin config file."),
+        _row("9280", title="VortexFileSync", summary="Synchronize your plugin configurations effortlessly across multiple servers."),
+    ],
+    ids=("plugin-owned-config-file", "plugin-config-sync-feature"),
+)
+def test_plugin_config_features_are_not_product_form_contradictions(row):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert foundation._independent_semantic_contradictions(row) == []
+
+
+def test_plugin_dependent_content_assets_are_out_of_scope_and_independently_detected():
+    row = _plugin_dependent_content_fixture()
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.OUT_OF_SCOPE_PRODUCT_FORM
+    assert foundation._independent_semantic_contradictions(row)
 
 
 def test_compatibility_only_and_unclear_product_form_abstain_to_review():
