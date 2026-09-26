@@ -1,19 +1,21 @@
-# YEE-73 goal alignment
+# YEE-75 goal alignment
 
 Status: `GOAL_ALIGNMENT: PASS`
 
 ## Product objective and scope
 
-BBB Market's canonical objective remains identifying a commercially viable paid Minecraft server-side/proxy plugin idea for server operators. The `PLUGIN_ONLY` invariant is unchanged. YEE-73 is descriptive Stage B infrastructure only; it creates source-aware category and subcategory facts and does not interpret opportunity, select candidates, or recommend products.
+BBB Market's canonical objective is unchanged: identify a commercially viable paid Minecraft server-side/proxy plugin idea for server operators. `PLUGIN_ONLY` remains binding. YEE-75 is descriptive Stage C infrastructure over already-confirmed plugin identities; it does not reopen eligibility, alter frozen categories, claim true market gaps, or recommend a product.
 
-## Accepted input and scope gate
+## Accepted input and frozen taxonomy
 
-The only production input is the accepted YEE-61 `category_first_foundation.sqlite`, opened read-only. Its SHA-256 is pinned to `12fa10a45a98df954c220f741a21ae8c8ed537a953415954e71fdab23bdd17ed`. The database reconciles to 10,018 scope identities and 1,352 category memberships, comprising 1,221 Hangar and 131 Voxel confirmed memberships. Scope statuses reconcile to Hangar: 1,221 confirmed / 2,600 review / 40 out of scope; Voxel: 131 confirmed / 4,633 review / 1,393 out of scope.
+The YEE-73 database is the accepted output of the completed Stage B category-signal layer; YEE-75 consumes that artifact as its sole read-only input. The Stage B label describes the input's provenance, not the current work order's stage.
 
-The accepted YEE-61 membership export SHA-256 is `e4254b9ccdb4e051036b3a7ce46f5a6b59b42be578e2fe0d5a66c5af988a993b`; scope export SHA-256 is `432968f99bf5b80cf7703fb88ad6141ba8504608564364db80e86c0cd7c85894`. The frozen taxonomy is `yee-61-functional-category-taxonomy-v0.1`, SHA-256 `b5720325dea06863408dfa1a05e2f981ecfeb3fac4a9e7266083ee17839c5126`, with 11 categories and 38 subcategories. Primary membership counts reconcile to the pinned inventory: administration 345; communication 97; developer_tools 72; economy 61; gameplay 477; minigames 26; protection 58; roleplay 20; server_utilities 0; uncategorized 136; world_management 60.
+The only production input is accepted YEE-73 `category_signal_layer.sqlite`, read-only, SHA-256 `374b5955d11764a9637e63f9611416ac4d6bc157c40f1582bebfb0eeaa1e11a3`, produced from accepted YEE-73 merge commit `3f7dc4c55973dafb8fc56bfda25f7c3e595ef872`. Its exact 1,352 signal identities are Hangar 1,221 and Voxel 131. The input carries 11 frozen categories, 38 frozen subcategories, 22 category/source facts, and 76 subcategory/source facts. Taxonomy version/hash are `yee-61-functional-category-taxonomy-v0.1` / `b5720325dea06863408dfa1a05e2f981ecfeb3fac4a9e7266083ee17839c5126`.
 
-Only rows in `plugin_category_memberships` whose corresponding scope status is `PLUGIN_PRODUCT_CONFIRMED` may produce signal facts. `PLUGIN_PRODUCT_REVIEW` and `OUT_OF_SCOPE_PRODUCT_FORM` remain upstream evidence only. YEE-73 neither reopens eligibility decisions nor changes category assignments or the frozen taxonomy.
+Only rows already present as confirmed YEE-73 signal members participate. YEE-61 `REVIEW` and `OUT_OF_SCOPE` populations are not imported or inferred. Category/subcategory assignment, YEE-29 metric semantics, taxonomy, and `analysis_as_of` remain unchanged. Historical YEE-30 through YEE-59 datasets and decisions are not read or used.
 
-## Stop boundary
+## Stage C boundary
 
-All metrics retain source and category/subcategory context; raw Hangar and Voxel downloads are not added or treated as comparable. Missing values stay null, zero-member taxonomy rows remain visible, and Voxel coverage uncertainty remains explicit. Outputs stop at member/category/subcategory signal facts and coverage reporting. No Stage C, whitespace analysis, opportunity state, candidate discovery, ranking, research, matching, or recommendation is performed.
+YEE-75 creates all 38 frozen subcategory baselines and deterministic, category-local lexical subniche evidence from accepted member titles and first summary sentences. Direction/source facts retain source-specific denominators and source-native metrics; raw cross-source downloads are never summed or directly compared. Supply statements mean observed confirmed supply only; sparse upstream confirmation, especially Voxel coverage, remains explicit as inference risk.
+
+No external/API research, JEV/LLM, embeddings, semantic/fuzzy merging, true-market supply estimate, global/category ranking, opportunity state, product shortlist, commercial validation, recommendation, or Stage D output is produced.
