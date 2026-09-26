@@ -299,6 +299,25 @@ def test_real_plugin_with_configurable_behavior_is_not_misclassified_as_plugin_d
     assert not any(code == "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT" for code in result["scope_reason_codes"])
 
 
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row("3450", source="hangar", title="EnderCore", summary="EnderCore is a central plugin that provides essential functions and resources for other plugins."),
+        _row("7126", source="hangar", title="VertexCore", summary="Shared core plugin providing configuration, database and command infrastructure for Paper plugins."),
+        _row("7426", title="HardnessControl", summary="Customise the hardness (destroyTime) of blocks through a plugin config file."),
+        _row("9280", title="VortexFileSync", summary="Synchronize your plugin configurations effortlessly across multiple servers."),
+        _row("9343", title="Free For All Plugin FFA", summary="The ultimate Modern FFA PvP plugin | Editable Kits | Unlimited Kits/Arenas | PAPI"),
+        _row("4464", title="ChestEnergistic - FREE", summary="A plugin setup that tries to bring the style and functions of applied energistics to your server."),
+    ],
+    ids=("shared-plugin-resources", "paper-plugin-infrastructure", "own-config-file", "sync-plugin-configs", "free-for-all-name", "plugin-setup-behavior"),
+)
+def test_true_plugin_product_and_config_behavior_controls_are_not_independent_contradictions(row):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert foundation._independent_semantic_contradictions(row) == []
+
+
 def test_compatibility_only_and_unclear_product_form_abstain_to_review():
     compatible_asset = _row("8", title="Vehicle Asset", summary="A resource that works with plugins like VehiclesPlus.")
     unclear = _row("9", title="A project", summary="A Minecraft server resource.")

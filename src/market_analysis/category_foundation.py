@@ -247,6 +247,19 @@ _ASSET_RULES = (
     ("OUT_OF_SCOPE_NON_PLUGIN_PRODUCT_CLASS", r"\b(?:modpack|datapack|resourcepack|shader pack)\b"),
 )
 
+_NON_PLUGIN_PRODUCT_CUE_PATTERN = (
+    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+)
+_REVERSE_PLUGIN_PRODUCT_PATTERN = (
+    r"\bplugins?(?:['’]s)?\s+"
+    r"(?:config(?:uration)?s?|settings?|setups?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+)
+_PLUGIN_BEHAVIOR_AROUND_REVERSE_PATTERN = (
+    r"\b(?:adds?|allows?|lets?|provides?|enables?|prevents?|manages?|tracks?|controls?|"
+    r"customi[sz]e(?:s|d|ing)?|synchroni[sz]e(?:s|d|ing)?|connects?|integrates?|automates?|"
+    r"offers?|creates?|makes?|brings?|extends?|restricts?|tries\s+to\s+(?:bring|add|provide|create|make))\b"
+)
+
 _EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
     (
         "OUT_OF_SCOPE_EXPLICIT_NON_PLUGIN_PRODUCT_FORM",
@@ -256,12 +269,12 @@ _EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
         "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
         r"\b(?:config(?:uration)?s?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
         r"[^.!?\n]{0,100}\b(?:for|of|using|made\s+(?:completely\s+)?(?:for|using)|built\s+(?:for|using)|requires?)\s+"
+        r"(?!(?:other|all|paper|spigot|bukkit|velocity|waterfall|purpur|fabric|forge)\s+plugins?\b)"
         r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b",
     ),
     (
         "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
-        r"\b(?:[\w][\w.'’&-]*\s+)?plugins?(?:['’]s)?\s+"
-        r"(?:config(?:uration)?s?|settings?|setups?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b",
+        _REVERSE_PLUGIN_PRODUCT_PATTERN,
     ),
     (
         "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
@@ -269,31 +282,40 @@ _EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
         r"[^.!?\n]{0,100}\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b",
     ),
 )
-_NON_PLUGIN_PRODUCT_CUE_PATTERN = (
-    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
-)
 _CROSS_FIELD_PLUGIN_DEPENDENCY_PATTERN = (
     r"\b(?:made\s+(?:completely\s+)?using|using|made\s+for|built\s+for|for|of|requires?)\s+"
+    r"(?!(?:other|all|paper|spigot|bukkit|velocity|waterfall|purpur|fabric|forge)\s+plugins?\b)"
     r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b|"
     r"\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b"
 )
 
 # This QA scan intentionally uses its own raw-text patterns rather than the
 # classifier's reasons/evidence, so it can detect a classifier regression.
+_QA_REVERSE_PLUGIN_PRODUCT_PATTERN = (
+    r"\bplugins?(?:['’]s)?\s+"
+    r"(?:configs?|configurations?|settings?|setups?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+)
 _QA_SEMANTIC_CONTRADICTION_RULES = (
     r"\bnot\s+(?:(?:a|an|the)\s+)?(?:itself\s+)?plugin\b|\b(?:is\s+not|isn't|aren't)\s+(?:(?:a|an|the)\s+)?(?:itself\s+)?plugin\b",
     r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b[^.!?\n]{0,110}"
-    r"\b(?:for|of|using|made\s+(?:completely\s+)?(?:for|using)|built\s+(?:for|using)|requires?)\s+(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b",
-    r"\b(?:[\w][\w.'’&-]*\s+)?plugins?(?:['’]s)?\s+"
-    r"(?:configs?|configurations?|settings?|setups?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b",
+    r"\b(?:for|of|using|made\s+(?:completely\s+)?(?:for|using)|built\s+(?:for|using)|requires?)\s+"
+    r"(?!(?:other|all|paper|spigot|bukkit|velocity|waterfall|purpur|fabric|forge)\s+plugins?\b)"
+    r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b",
+    _QA_REVERSE_PLUGIN_PRODUCT_PATTERN,
     r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
     r"[^.!?\n]{0,110}\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b",
 )
 _QA_PRODUCT_CUE = r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
 _QA_CROSS_FIELD_DEPENDENCY = (
     r"\b(?:made\s+(?:completely\s+)?using|using|made\s+for|built\s+for|for|of|requires?)\s+"
+    r"(?!(?:other|all|paper|spigot|bukkit|velocity|waterfall|purpur|fabric|forge)\s+plugins?\b)"
     r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b|"
     r"\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b"
+)
+_QA_PLUGIN_BEHAVIOR_CONTEXT = (
+    r"\b(?:adds?|allows?|lets?|provides?|enables?|prevents?|manages?|tracks?|controls?|"
+    r"customi[sz]e(?:s|d|ing)?|synchroni[sz]e(?:s|d|ing)?|connects?|integrates?|automates?|"
+    r"offers?|creates?|makes?|brings?|extends?|restricts?|tries\s+to\s+(?:bring|add|provide|create|make))\b"
 )
 
 _DIRECT_PLUGIN_RULES = (
@@ -517,6 +539,17 @@ def _asset_form_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     for reason, pattern in _ASSET_RULES:
         for span in _matched_spans(row, pattern):
+            if reason == "OUT_OF_SCOPE_CONFIGURATION_PRODUCT" and span["field"] == "summary":
+                summary = _text(row, "summary")
+                title = _text(row, "title")
+                plugin_config_file = re.search(r"\bplugin\s+config(?:uration)?\s+file\b", summary, re.IGNORECASE)
+                context = summary[max(0, plugin_config_file.start() - 100):min(len(summary), plugin_config_file.end() + 100)] if plugin_config_file else ""
+                if (
+                    plugin_config_file
+                    and not re.search(_NON_PLUGIN_PRODUCT_CUE_PATTERN, title, re.IGNORECASE)
+                    and re.search(_PLUGIN_BEHAVIOR_AROUND_REVERSE_PATTERN, context, re.IGNORECASE)
+                ):
+                    continue
             found.append({"reason_code": reason, **span})
     title = _text(row, "title")
     summary = _text(row, "summary")
@@ -585,11 +618,17 @@ def _direct_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[str, st
 
 def _explicit_non_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
-    for reason, pattern in _EXPLICIT_NON_PLUGIN_PRODUCT_RULES:
-        for span in _matched_spans(row, pattern):
-            found.append({"reason_code": reason, **span})
     title = _text(row, "title")
     summary = _text(row, "summary")
+    for reason, pattern in _EXPLICIT_NON_PLUGIN_PRODUCT_RULES:
+        for span in _matched_spans(row, pattern):
+            if pattern == _REVERSE_PLUGIN_PRODUCT_PATTERN and span["field"] == "summary":
+                title_has_product_cue = re.search(_NON_PLUGIN_PRODUCT_CUE_PATTERN, title, re.IGNORECASE)
+                match = re.search(pattern, summary, re.IGNORECASE)
+                context = summary[max(0, match.start() - 100):min(len(summary), match.end() + 100)] if match else ""
+                if not title_has_product_cue and re.search(_PLUGIN_BEHAVIOR_AROUND_REVERSE_PATTERN, context, re.IGNORECASE):
+                    continue
+            found.append({"reason_code": reason, **span})
     product_pattern = re.compile(_NON_PLUGIN_PRODUCT_CUE_PATTERN, re.IGNORECASE)
     dependency_pattern = re.compile(_CROSS_FIELD_PLUGIN_DEPENDENCY_PATTERN, re.IGNORECASE)
     for product_field, product_text, dependency_field, dependency_text in (
@@ -629,6 +668,11 @@ def _independent_semantic_contradictions(row: Mapping[str, Any]) -> list[dict[st
         for pattern in _QA_SEMANTIC_CONTRADICTION_RULES:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
+                if pattern == _QA_REVERSE_PLUGIN_PRODUCT_PATTERN and field == "summary":
+                    title_has_product_cue = re.search(_QA_PRODUCT_CUE, raw_fields["title"], re.IGNORECASE)
+                    context = text[max(0, match.start() - 100):min(len(text), match.end() + 100)]
+                    if not title_has_product_cue and re.search(_QA_PLUGIN_BEHAVIOR_CONTEXT, context, re.IGNORECASE):
+                        continue
                 found.append({"field": field, "text_span": match.group(0), "rule_pattern": pattern})
     cue_pattern = re.compile(_QA_PRODUCT_CUE, re.IGNORECASE)
     dependency_pattern = re.compile(_QA_CROSS_FIELD_DEPENDENCY, re.IGNORECASE)
