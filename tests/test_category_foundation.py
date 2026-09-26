@@ -133,6 +133,97 @@ def test_server_plugin_product_is_confirmed_with_both_evidence_layers():
     assert any(item["evidence_type"] == "YEE60_PLUGIN_ELIGIBILITY" for item in result["scope_evidence"])
 
 
+def _supervisor_blocker_rows():
+    return [
+        _row("2227", title="3 Planes for Cold war", summary="This is not a plugin, they are models for model engine or quality vehicles"),
+        _row("1139", title="Essentials X Clean Configuration", summary="Custom Messages Configuration for the Essentials X Plugin (English)"),
+        _row("1238", title="JNBans [EN/SP]", summary="Professionally designed setup for AdvancedBan plugin"),
+        _row("1386", title="AutoAnnouncer Config", summary="A Configuration For Your AutoAnnouncer Plugin"),
+        _row("4400", title="Hypixel Maps Setup (BW-1058)", summary="Hypixel Bedwars Maps Configuration for BedWars1058 Plugin"),
+        _row("4382", title="Gestures Package | Vanilla Like", summary="The ultimate package for any player emotes plugin."),
+    ]
+
+
+@pytest.mark.parametrize("row", _supervisor_blocker_rows(), ids=lambda row: row["canonical_identity"])
+def test_supervisor_production_false_positives_are_explicitly_out_of_scope(row):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.OUT_OF_SCOPE_PRODUCT_FORM
+    assert any(code.startswith("OUT_OF_SCOPE_") for code in result["scope_reason_codes"])
+    assert not any(item.get("reason_code") == "PLUGIN_PRODUCT_EXPLICIT_TEXT" for item in result["scope_evidence"])
+
+
+@pytest.mark.parametrize(
+    ("title", "summary", "expected"),
+    [
+        ("Planes for Cold War", "This is not a plugin; these are models used with vehicle plugins.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("Essentials configuration", "Configuration for the Essentials X Plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("AdvancedBan Setup", "A setup made for AdvancedBan plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("AdvancedBan Setup", "A setup using AdvancedBan plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("Emotes Package", "Bundle using a player emotes plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("BedWars Maps", "Maps configuration of BedWars1058 plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("ChunkGuard", "This Paper plugin provides a config editor for server administrators.", foundation.PLUGIN_PRODUCT_CONFIRMED),
+        ("Plugin Package Manager", "This Paper plugin manages downloadable plugin packages.", foundation.PLUGIN_PRODUCT_CONFIRMED),
+        ("Compatible Resource", "Works with plugins like VehiclesPlus.", foundation.PLUGIN_PRODUCT_REVIEW),
+    ],
+)
+def test_adversarial_non_plugin_context_overrides_only_dependent_plugin_mentions(title, summary, expected):
+    result = foundation.classify_product_form(_row("adversarial", title=title, summary=summary), _eligible())
+
+    assert result["product_scope_status"] == expected
+
+
+def test_independent_raw_text_contradiction_scan_does_not_use_classifier_evidence():
+    row = _row("contradiction", title="A Paper plugin", summary="This is not a plugin; it is a model.")
+    assert foundation._independent_semantic_contradictions(row)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row("qa-negation", title="Models", summary="This is not a plugin, these are models."),
+        _row("qa-dependency", title="Essentials Configuration", summary="Configuration for the Essentials X Plugin."),
+    ],
+    ids=("explicit-negation", "dependent-product"),
+)
+def test_independent_qa_rejects_false_confirmed_scope_even_if_classifier_claims_confirmed(tmp_path, monkeypatch, row):
+    input_db, input_jsonl = _write_fixture_input(tmp_path, [row])
+
+    def false_confirmation(_row, _eligibility):
+        return {
+            "product_scope_status": foundation.PLUGIN_PRODUCT_CONFIRMED,
+            "scope_reason_codes": ["PLUGIN_PRODUCT_EXPLICIT_SOURCE_TEXT"],
+            "scope_evidence": [{"reason_code": "PLUGIN_PRODUCT_EXPLICIT_TEXT", "text_span": "plugin"}],
+            "scope_confidence": "HIGH",
+            "scope_method": "test_false_confirmation",
+            "scope_classifier_version": foundation.SCOPE_CLASSIFIER_VERSION,
+        }
+
+    monkeypatch.setattr(foundation, "classify_product_form", false_confirmation)
+    output_dir = tmp_path / "qa-detects-regression"
+    with pytest.raises(foundation.CategoryFoundationError, match="independent_semantic_contradiction_check_zero"):
+        foundation.build_category_foundation(input_db, input_jsonl, output_dir, enforce_pinned_inputs=False)
+
+    qa = json.loads((output_dir / "QA_RESULT.json").read_text(encoding="utf-8"))
+    assert qa["checks"]["independent_semantic_contradiction_check_zero"] is False
+    assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 1
+
+
+def test_supervisor_false_positive_fixture_build_never_enters_category_memberships(tmp_path):
+    rows = _supervisor_blocker_rows()
+    input_db, input_jsonl = _write_fixture_input(tmp_path, rows)
+    output_dir = tmp_path / "supervisor-fixtures"
+
+    qa = foundation.build_category_foundation(input_db, input_jsonl, output_dir, enforce_pinned_inputs=False)
+
+    assert qa["status"] == "PASS"
+    assert qa["row_counts"]["plugin_product_confirmed"] == 0
+    assert qa["row_counts"]["plugin_category_memberships"] == 0
+    assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 0
+    assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == 6
+    assert (output_dir / "plugin_category_memberships.jsonl").read_text(encoding="utf-8") == ""
+
+
 def test_compatibility_only_and_unclear_product_form_abstain_to_review():
     compatible_asset = _row("8", title="Vehicle Asset", summary="A resource that works with plugins like VehiclesPlus.")
     unclear = _row("9", title="A project", summary="A Minecraft server resource.")

@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 WORK_ORDER = "YEE-61"
 SCHEMA_VERSION = "yee-61-category-first-foundation-v0.1"
-SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.1"
+SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.2"
 ASSIGNMENT_VERSION = "yee-61-category-assignment-v0.1"
 TAXONOMY_VERSION = "yee-61-functional-category-taxonomy-v0.1"
 YEE60_CLASSIFIER_VERSION = "yee-60-source-native-plugin-classifier-v0.1"
@@ -30,6 +30,10 @@ YEE60_JSONL_SHA256 = "355e4efe0e75d5bbac4205986c7b3fd37a405bbab8ca6be9d4d3b807ed
 YEE60_SQLITE_SHA256 = "94171517a9c3fb1670ad30f49d48d12fcde8fc37f6f9e1af6aa17c0ca687848e"
 EXPECTED_SOURCE_COUNTS = {"hangar": 3861, "voxel": 6157}
 EXPECTED_INPUT_ROWS = 10018
+KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES = (
+    "voxel:1000", "voxel:10013", "voxel:10019", "voxel:2227",
+    "voxel:1139", "voxel:1238", "voxel:1386", "voxel:4400", "voxel:4382",
+)
 
 PLUGIN_PRODUCT_CONFIRMED = "PLUGIN_PRODUCT_CONFIRMED"
 PLUGIN_PRODUCT_REVIEW = "PLUGIN_PRODUCT_REVIEW"
@@ -238,6 +242,27 @@ _ASSET_RULES = (
     ("OUT_OF_SCOPE_PLUGIN_DEPENDENT_CONTENT", r"\bmythicmobs?\b.{0,80}\b(?:custom mobs?|mob packs?)\b"),
     ("OUT_OF_SCOPE_PLUGIN_DEPENDENT_CONTENT", r"\b(?:armor|weapon|item|mob|fish|elytra|nether)\s+sets?\b"),
     ("OUT_OF_SCOPE_NON_PLUGIN_PRODUCT_CLASS", r"\b(?:modpack|datapack|resourcepack|shader pack)\b"),
+)
+
+_EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
+    (
+        "OUT_OF_SCOPE_EXPLICIT_NON_PLUGIN_PRODUCT_FORM",
+        r"\b(?:not|is\s+not|isn't|aren't)\s+(?:(?:(?:a|an|the)\s+)?(?:itself\s+)?|itself\s+(?:(?:a|an|the)\s+)?)plugin\b",
+    ),
+    (
+        "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
+        r"\b(?:config(?:uration)?|settings?|setup|package|bundle|maps?|world|spawn|lobby|arena|model|asset|resource|content)\b"
+        r"[^.!?\n]{0,100}\b(?:for|of|using|made\s+for|built\s+for|requires?)\s+"
+        r"(?:[\w][\w.'’&-]*\s+){0,5}plugin\b",
+    ),
+)
+
+# This QA scan intentionally uses its own raw-text patterns rather than the
+# classifier's reasons/evidence, so it can detect a classifier regression.
+_QA_SEMANTIC_CONTRADICTION_RULES = (
+    r"\bnot\s+(?:(?:a|an|the)\s+)?(?:itself\s+)?plugin\b|\b(?:is\s+not|isn't|aren't)\s+(?:(?:a|an|the)\s+)?(?:itself\s+)?plugin\b",
+    r"\b(?:configuration|config|setup|package|bundle|map|maps)\b[^.!?\n]{0,110}"
+    r"\b(?:for|of|using|made\s+for|built\s+for)\s+(?:[\w][\w.'’&-]*\s+){0,5}plugin\b",
 )
 
 _DIRECT_PLUGIN_RULES = (
@@ -527,6 +552,29 @@ def _direct_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[str, st
     return [unique[key] for key in sorted(unique)]
 
 
+def _explicit_non_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
+    found: list[dict[str, str]] = []
+    for reason, pattern in _EXPLICIT_NON_PLUGIN_PRODUCT_RULES:
+        for span in _matched_spans(row, pattern):
+            found.append({"reason_code": reason, **span})
+    unique = {}
+    for item in found:
+        unique[(item["reason_code"], item["field"], item["text_span"], item["rule_pattern"])] = item
+    return [unique[key] for key in sorted(unique)]
+
+
+def _independent_semantic_contradictions(row: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Scan raw title/summary text independently of normalized classifier output."""
+    found: list[dict[str, str]] = []
+    for field in ("title", "summary"):
+        text = _text(row, field)
+        for pattern in _QA_SEMANTIC_CONTRADICTION_RULES:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                found.append({"field": field, "text_span": match.group(0), "rule_pattern": pattern})
+    return found
+
+
 def _server_behavior_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     for pattern in _SERVER_BEHAVIOR_RULES:
@@ -544,11 +592,17 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
         raise CategoryFoundationError("Product-form guard accepts only rows with retained YEE-60 positive evidence")
 
     asset_evidence = _asset_form_evidence(row)
+    explicit_non_plugin_evidence = _explicit_non_plugin_product_evidence(row)
     direct_evidence = _direct_plugin_product_evidence(row)
     behavior_evidence = _server_behavior_evidence(row)
     compatibility_only = bool(_COMPATIBILITY_ONLY_RULE.search(f"{_text(row, 'title')}\n{_text(row, 'summary')}")) and not direct_evidence and not behavior_evidence
 
-    if asset_evidence and direct_evidence:
+    if explicit_non_plugin_evidence:
+        status = OUT_OF_SCOPE_PRODUCT_FORM
+        product_evidence = explicit_non_plugin_evidence + asset_evidence
+        reasons = sorted({item["reason_code"] for item in product_evidence})
+        confidence = "HIGH"
+    elif asset_evidence and direct_evidence:
         status = PLUGIN_PRODUCT_REVIEW
         reasons = ["CONFLICTING_PLUGIN_AND_NON_PLUGIN_PRODUCT_FORM_EVIDENCE"]
         confidence = "LOW"
@@ -994,7 +1048,7 @@ def _write_semantic_smoke(
         "| Identity | Source title | Source summary | Retained YEE-60 positive evidence | YEE-61 guard result |",
         "|---|---|---|---|---|",
     ]
-    for identity in ("voxel:1000", "voxel:10013", "voxel:10019"):
+    for identity in KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES:
         scope = scope_by_id.get(identity)
         if scope is None:
             continue
@@ -1006,7 +1060,7 @@ def _write_semantic_smoke(
         lines.append("| " + " | ".join(_markdown_table_cell(value) for value in columns) + " |")
     lines.extend([
         "",
-        "The examples remain inside the immutable YEE-60 accepted universe but are narrowed out of category analysis because the source-native product form is respectively a 3D model, a dimensioned spawn/build, and a YAML shop configuration. Their platform facets are retained as eligibility evidence, not treated as proof that the product itself is a plugin.",
+        "These examples remain inside the immutable YEE-60 accepted universe but are narrowed out of category analysis because the source text explicitly identifies models/builds/configurations/setups/packages, or says the product is not a plugin. A generic plugin mention in that same context cannot override the product-form contradiction.",
         "",
         "## Deterministic source × demand-stratified taxonomy review sample",
         "",
@@ -1303,6 +1357,19 @@ def _qa_result(
         for row in memberships
     )
     inventory_ids = [row["category_id"] for row in generated["inventory"]]
+    semantic_contradictions = []
+    for row in scope_rows:
+        findings = _independent_semantic_contradictions(row)
+        if findings:
+            semantic_contradictions.append({
+                "canonical_identity": row["canonical_identity"],
+                "product_scope_status": row["product_scope_status"],
+                "raw_text_findings": findings,
+            })
+    confirmed_semantic_contradictions = [
+        row for row in semantic_contradictions
+        if row["product_scope_status"] == PLUGIN_PRODUCT_CONFIRMED
+    ]
     sqlite_path = output_dir / "category_first_foundation.sqlite"
     db = sqlite3.connect(sqlite_path)
     try:
@@ -1381,8 +1448,9 @@ def _qa_result(
         "original_yee60_eligibility_evidence_retained": all(row["yee60_plugin_eligibility"] == "PLUGIN_ELIGIBLE" and row["yee60_positive_evidence"] for row in scope_rows),
         "known_semantic_false_positive_fixtures_narrowed": (not enforce_pinned_inputs) or all(
             next(row for row in scope_rows if row["canonical_identity"] == identity)["product_scope_status"] == OUT_OF_SCOPE_PRODUCT_FORM
-            for identity in ("voxel:1000", "voxel:10013", "voxel:10019")
+            for identity in KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES
         ),
+        "independent_semantic_contradiction_check_zero": not confirmed_semantic_contradictions,
         "category_membership_equals_confirmed_scope_set": membership_ids == confirmed_ids,
         "no_review_or_out_of_scope_category_leakage": db_leaks == 0,
         "every_confirmed_row_has_exactly_one_primary_or_uncategorized": all_assignments_valid and len(membership_ids) == len(confirmed_ids),
@@ -1427,6 +1495,12 @@ def _qa_result(
         "scope_status_counts": {status: status_counts.get(status, 0) for status in SCOPE_STATUSES},
         "primary_category_counts": {category_id: category_counts.get(category_id, 0) for category_id in TAXONOMY_CATEGORY_IDS},
         "taxonomy_review_sample_count": len(generated["taxonomy_sample"]),
+        "semantic_contradiction_audit": {
+            "method": "independent raw title/summary scan; does not read classifier reason codes, evidence, or normalized labels when detecting contradiction spans",
+            "raw_text_contradiction_identity_count": len(semantic_contradictions),
+            "confirmed_contradiction_count": len(confirmed_semantic_contradictions),
+            "contradiction_identities": semantic_contradictions,
+        },
         "taxonomy_version": TAXONOMY_VERSION,
         "taxonomy_sha256": taxonomy["taxonomy_sha256"],
         "input_sha256_before": dict(input_hashes),
@@ -1459,6 +1533,7 @@ def _final_report(qa: Mapping[str, Any]) -> str:
         f"- YEE-60 JSONL SHA-256 before/after: `{qa['input_sha256_before']['plugin_only_resource_features.jsonl']}` / `{qa['input_sha256_after']['plugin_only_resource_features.jsonl']}`",
         f"- YEE-60 SQLite SHA-256 before/after: `{qa['input_sha256_before']['plugin_eligibility.sqlite']}` / `{qa['input_sha256_after']['plugin_eligibility.sqlite']}`",
         f"- QA: `{qa['status']}`; passing checks {sum(bool(value) for value in qa['checks'].values())}/{len(qa['checks'])}; failed checks {len(qa['failed_checks'])}.",
+        f"- Independent raw-text semantic contradiction audit: {qa['semantic_contradiction_audit']['raw_text_contradiction_identity_count']} contradiction-bearing identities scanned; {qa['semantic_contradiction_audit']['confirmed_contradiction_count']} confirmed contradictions.",
         f"- Deterministic replay of core exports/database/contracts: `{qa['replay']['byte_identical']}` ({len(qa['replay']['compared_artifacts'])} artifacts).",
         "",
         "## Category-first stop boundary",
