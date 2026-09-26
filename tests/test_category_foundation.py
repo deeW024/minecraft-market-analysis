@@ -141,6 +141,19 @@ def _supervisor_blocker_rows():
         _row("1386", title="AutoAnnouncer Config", summary="A Configuration For Your AutoAnnouncer Plugin"),
         _row("4400", title="Hypixel Maps Setup (BW-1058)", summary="Hypixel Bedwars Maps Configuration for BedWars1058 Plugin"),
         _row("4382", title="Gestures Package | Vanilla Like", summary="The ultimate package for any player emotes plugin."),
+        _row("4698", title="MMO TABs Configs 7colors+", summary="MMo+Color Configs for TAB plugin"),
+        _row("6353", title="EconomyShopGUI Configuration", summary="#1 EconomyShopGUI Plugin Configuration - Organized, Fancy, Balanced, 250+ Items"),
+        _row("6356", title="DeathMessages | 250+ Messages", summary="#1 DeathMessages Plugin Configuration - 250+ Custom Death Messages & 5 Fancy Colors"),
+        _row("6606", title="Survival Tab Config", summary="Tab Plugin config specially made for Survival based servers"),
+        _row("6868", title="Maintenance plugin Config", summary="Professional Maintenance plugin config"),
+        _row("6873", title="Barricades Props | SaturnStudio", summary="Barricades Props Models for ItemsAdder Plugin"),
+        _row("6874", title="Parking Gate Set | SaturnStudio", summary="Parking Gate Decoration Models For ItemsAdder Plugin"),
+        _row("6875", title="Shell Gas Sation | SaturnStudio", summary="Shell Gas Station Models, for ItemsAdder Plugin"),
+        _row("6876", title="Solar Panels | SaturnStudio", summary="Big and Small solar panels Models for ItemsAdder plugin"),
+        _row("8176", title="[FREE] Donut Smp 2 TAB config", summary="configs for Tab plugin"),
+        _row("416", title="Hangman DeluxeMenus Setup", summary="A Hangman game made completely using DeluxeMenus plugin"),
+        _row("5456", title="AdvancedBan Configuration", summary="This is a small message modification of the AdvancedBans plugin."),
+        _row("7237", title="Configuration Quetes French", summary="Menu Deluxemenu qui utilise le plugin quest, Il y a au total 177 quetes."),
     ]
 
 
@@ -162,6 +175,12 @@ def test_supervisor_production_false_positives_are_explicitly_out_of_scope(row):
         ("AdvancedBan Setup", "A setup using AdvancedBan plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
         ("Emotes Package", "Bundle using a player emotes plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
         ("BedWars Maps", "Maps configuration of BedWars1058 plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("EconomyShopGUI Plugin Configuration", "An organized configuration for the EconomyShopGUI plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("TAB Plugin config", "Custom colors and settings for TAB plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("Solar Panels", "Big and small models for ItemsAdder Plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("Hangman DeluxeMenus Setup", "A Hangman game made completely using DeluxeMenus plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("AdvancedBan Configuration", "A small message modification of the AdvancedBans plugin.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        ("Configuration Quetes French", "Menu Deluxemenu qui utilise le plugin quest.", foundation.OUT_OF_SCOPE_PRODUCT_FORM),
         ("ChunkGuard", "This Paper plugin provides a config editor for server administrators.", foundation.PLUGIN_PRODUCT_CONFIRMED),
         ("Plugin Package Manager", "This Paper plugin manages downloadable plugin packages.", foundation.PLUGIN_PRODUCT_CONFIRMED),
         ("Compatible Resource", "Works with plugins like VehiclesPlus.", foundation.PLUGIN_PRODUCT_REVIEW),
@@ -176,6 +195,42 @@ def test_adversarial_non_plugin_context_overrides_only_dependent_plugin_mentions
 def test_independent_raw_text_contradiction_scan_does_not_use_classifier_evidence():
     row = _row("contradiction", title="A Paper plugin", summary="This is not a plugin; it is a model.")
     assert foundation._independent_semantic_contradictions(row)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row("qa-negation", title="Models", summary="This is not a plugin, these are models."),
+        _row("qa-forward-config", title="Essentials Configuration", summary="Configuration for the Essentials X Plugin."),
+        _row("qa-reverse-config", title="EconomyShopGUI Plugin Configuration", summary="An EconomyShopGUI Plugin Configuration."),
+        _row("qa-plural-model", title="Solar Panels", summary="Big and small models for ItemsAdder Plugin."),
+        _row("qa-split-setup", title="Hangman DeluxeMenus Setup", summary="A Hangman game made completely using DeluxeMenus plugin."),
+        _row("qa-split-modification", title="AdvancedBan Configuration", summary="A small message modification of the AdvancedBans plugin."),
+        _row("qa-french-use", title="Configuration Quetes French", summary="Menu Deluxemenu qui utilise le plugin quest."),
+    ],
+    ids=("explicit-negation", "dependent-product", "reverse-plugin-config", "plural-models", "split-setup", "split-modification", "french-plugin-use"),
+)
+def test_independent_qa_rejects_each_product_form_family_even_if_classifier_confirms(tmp_path, monkeypatch, row):
+    input_db, input_jsonl = _write_fixture_input(tmp_path, [row])
+
+    def false_confirmation(_row, _eligibility):
+        return {
+            "product_scope_status": foundation.PLUGIN_PRODUCT_CONFIRMED,
+            "scope_reason_codes": ["PLUGIN_PRODUCT_EXPLICIT_SOURCE_TEXT"],
+            "scope_evidence": [{"reason_code": "PLUGIN_PRODUCT_EXPLICIT_TEXT", "text_span": "plugin"}],
+            "scope_confidence": "HIGH",
+            "scope_method": "test_false_confirmation",
+            "scope_classifier_version": foundation.SCOPE_CLASSIFIER_VERSION,
+        }
+
+    monkeypatch.setattr(foundation, "classify_product_form", false_confirmation)
+    output_dir = tmp_path / "qa-detects-product-form-regression"
+    with pytest.raises(foundation.CategoryFoundationError, match="independent_semantic_contradiction_check_zero"):
+        foundation.build_category_foundation(input_db, input_jsonl, output_dir, enforce_pinned_inputs=False)
+
+    qa = json.loads((output_dir / "QA_RESULT.json").read_text(encoding="utf-8"))
+    assert qa["checks"]["independent_semantic_contradiction_check_zero"] is False
+    assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 1
 
 
 @pytest.mark.parametrize(
@@ -220,8 +275,28 @@ def test_supervisor_false_positive_fixture_build_never_enters_category_membershi
     assert qa["row_counts"]["plugin_product_confirmed"] == 0
     assert qa["row_counts"]["plugin_category_memberships"] == 0
     assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 0
-    assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == 6
+    assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == len(rows)
+    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.3"
+    manifest = json.loads((output_dir / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
+    assert manifest["scope_classifier_version"] == qa["scope_classifier_version"]
+    assert qa["scope_classifier_version"] in (output_dir / "FINAL_REPORT.md").read_text(encoding="utf-8")
     assert (output_dir / "plugin_category_memberships.jsonl").read_text(encoding="utf-8") == ""
+
+
+@pytest.mark.parametrize(
+    ("title", "summary"),
+    [
+        ("Configurable ClaimGuard", "This Paper plugin offers configurable claim rules and lets operators configure exemptions."),
+        ("Maintenance Scheduler", "This Paper plugin manages configurable maintenance windows and configurable messages."),
+        ("Setup Wizard", "This Paper plugin guides administrators through setup and exposes configurable defaults."),
+    ],
+    ids=("configurable-claims", "configurable-maintenance", "in-product-setup"),
+)
+def test_real_plugin_with_configurable_behavior_is_not_misclassified_as_plugin_dependent_asset(title, summary):
+    result = foundation.classify_product_form(_row("configurable-plugin", title=title, summary=summary), _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert not any(code == "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT" for code in result["scope_reason_codes"])
 
 
 def test_compatibility_only_and_unclear_product_form_abstain_to_review():

@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 WORK_ORDER = "YEE-61"
 SCHEMA_VERSION = "yee-61-category-first-foundation-v0.1"
-SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.2"
+SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.3"
 ASSIGNMENT_VERSION = "yee-61-category-assignment-v0.1"
 TAXONOMY_VERSION = "yee-61-functional-category-taxonomy-v0.1"
 YEE60_CLASSIFIER_VERSION = "yee-60-source-native-plugin-classifier-v0.1"
@@ -33,6 +33,9 @@ EXPECTED_INPUT_ROWS = 10018
 KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES = (
     "voxel:1000", "voxel:10013", "voxel:10019", "voxel:2227",
     "voxel:1139", "voxel:1238", "voxel:1386", "voxel:4400", "voxel:4382",
+    "voxel:416", "voxel:4698", "voxel:5456", "voxel:6353", "voxel:6356",
+    "voxel:6606", "voxel:6868", "voxel:6873", "voxel:6874", "voxel:6875",
+    "voxel:6876", "voxel:7237", "voxel:8176",
 )
 
 PLUGIN_PRODUCT_CONFIRMED = "PLUGIN_PRODUCT_CONFIRMED"
@@ -251,18 +254,46 @@ _EXPLICIT_NON_PLUGIN_PRODUCT_RULES = (
     ),
     (
         "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
-        r"\b(?:config(?:uration)?|settings?|setup|package|bundle|maps?|world|spawn|lobby|arena|model|asset|resource|content)\b"
-        r"[^.!?\n]{0,100}\b(?:for|of|using|made\s+for|built\s+for|requires?)\s+"
-        r"(?:[\w][\w.'’&-]*\s+){0,5}plugin\b",
+        r"\b(?:config(?:uration)?s?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+        r"[^.!?\n]{0,100}\b(?:for|of|using|made\s+(?:completely\s+)?(?:for|using)|built\s+(?:for|using)|requires?)\s+"
+        r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b",
     ),
+    (
+        "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
+        r"\b(?:[\w][\w.'’&-]*\s+)?plugins?(?:['’]s)?\s+"
+        r"(?:config(?:uration)?s?|settings?|setups?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b",
+    ),
+    (
+        "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
+        r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+        r"[^.!?\n]{0,100}\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b",
+    ),
+)
+_NON_PLUGIN_PRODUCT_CUE_PATTERN = (
+    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+)
+_CROSS_FIELD_PLUGIN_DEPENDENCY_PATTERN = (
+    r"\b(?:made\s+(?:completely\s+)?using|using|made\s+for|built\s+for|for|of|requires?)\s+"
+    r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b|"
+    r"\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b"
 )
 
 # This QA scan intentionally uses its own raw-text patterns rather than the
 # classifier's reasons/evidence, so it can detect a classifier regression.
 _QA_SEMANTIC_CONTRADICTION_RULES = (
     r"\bnot\s+(?:(?:a|an|the)\s+)?(?:itself\s+)?plugin\b|\b(?:is\s+not|isn't|aren't)\s+(?:(?:a|an|the)\s+)?(?:itself\s+)?plugin\b",
-    r"\b(?:configuration|config|setup|package|bundle|map|maps)\b[^.!?\n]{0,110}"
-    r"\b(?:for|of|using|made\s+for|built\s+for)\s+(?:[\w][\w.'’&-]*\s+){0,5}plugin\b",
+    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b[^.!?\n]{0,110}"
+    r"\b(?:for|of|using|made\s+(?:completely\s+)?(?:for|using)|built\s+(?:for|using)|requires?)\s+(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b",
+    r"\b(?:[\w][\w.'’&-]*\s+)?plugins?(?:['’]s)?\s+"
+    r"(?:configs?|configurations?|settings?|setups?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b",
+    r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+    r"[^.!?\n]{0,110}\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b",
+)
+_QA_PRODUCT_CUE = r"\b(?:configs?|configurations?|settings?|setups?|packages?|bundles?|maps?|worlds?|spawns?|lobbies?|arenas?|models?|assets?|resources?|contents?|menus?)\b"
+_QA_CROSS_FIELD_DEPENDENCY = (
+    r"\b(?:made\s+(?:completely\s+)?using|using|made\s+for|built\s+for|for|of|requires?)\s+"
+    r"(?:[\w][\w.'’&-]*\s+){0,5}plugins?\b|"
+    r"\butilise(?:nt)?\s+(?:le|la|les|un|une)?\s*plugin\b"
 )
 
 _DIRECT_PLUGIN_RULES = (
@@ -557,6 +588,32 @@ def _explicit_non_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[s
     for reason, pattern in _EXPLICIT_NON_PLUGIN_PRODUCT_RULES:
         for span in _matched_spans(row, pattern):
             found.append({"reason_code": reason, **span})
+    title = _text(row, "title")
+    summary = _text(row, "summary")
+    product_pattern = re.compile(_NON_PLUGIN_PRODUCT_CUE_PATTERN, re.IGNORECASE)
+    dependency_pattern = re.compile(_CROSS_FIELD_PLUGIN_DEPENDENCY_PATTERN, re.IGNORECASE)
+    for product_field, product_text, dependency_field, dependency_text in (
+        ("title", title, "summary", summary),
+        ("summary", summary, "title", title),
+    ):
+        product = product_pattern.search(product_text)
+        dependency = dependency_pattern.search(dependency_text)
+        if product and dependency:
+            rule = "cross_field_product_form_plus_plugin_dependency"
+            found.extend([
+                {
+                    "reason_code": "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
+                    "field": product_field,
+                    "text_span": product.group(0),
+                    "rule_pattern": rule,
+                },
+                {
+                    "reason_code": "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT",
+                    "field": dependency_field,
+                    "text_span": dependency.group(0),
+                    "rule_pattern": rule,
+                },
+            ])
     unique = {}
     for item in found:
         unique[(item["reason_code"], item["field"], item["text_span"], item["rule_pattern"])] = item
@@ -566,12 +623,24 @@ def _explicit_non_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[s
 def _independent_semantic_contradictions(row: Mapping[str, Any]) -> list[dict[str, str]]:
     """Scan raw title/summary text independently of normalized classifier output."""
     found: list[dict[str, str]] = []
+    raw_fields = {field: _text(row, field) for field in ("title", "summary")}
     for field in ("title", "summary"):
-        text = _text(row, field)
+        text = raw_fields[field]
         for pattern in _QA_SEMANTIC_CONTRADICTION_RULES:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 found.append({"field": field, "text_span": match.group(0), "rule_pattern": pattern})
+    cue_pattern = re.compile(_QA_PRODUCT_CUE, re.IGNORECASE)
+    dependency_pattern = re.compile(_QA_CROSS_FIELD_DEPENDENCY, re.IGNORECASE)
+    for product_field, dependency_field in (("title", "summary"), ("summary", "title")):
+        product = cue_pattern.search(raw_fields[product_field])
+        dependency = dependency_pattern.search(raw_fields[dependency_field])
+        if product and dependency:
+            found.append({
+                "field": f"{product_field}+{dependency_field}",
+                "text_span": f"{product.group(0)} / {dependency.group(0)}",
+                "rule_pattern": "independent_cross_field_product_dependency_pair",
+            })
     return found
 
 
@@ -1480,6 +1549,7 @@ def _qa_result(
     return {
         "work_order": WORK_ORDER,
         "schema_version": SCHEMA_VERSION,
+        "scope_classifier_version": SCOPE_CLASSIFIER_VERSION,
         "status": "PASS" if not failed else "FAIL",
         "goal_alignment": "PASS_WITH_REQUIRED_SCOPE_HARDENING",
         "source_counts": dict(source_counts),
@@ -1527,6 +1597,7 @@ def _final_report(qa: Mapping[str, Any]) -> str:
         f"- OUT_OF_SCOPE_PRODUCT_FORM: {counts['out_of_scope_product_form']:,}",
         f"- Category memberships: {counts['plugin_category_memberships']:,}",
         f"- Frozen categories including UNCATEGORIZED: {counts['plugin_category_inventory']}",
+        f"- Product-form scope classifier: `{qa['scope_classifier_version']}`",
         f"- Taxonomy version/hash: `{qa['taxonomy_version']}` / `{qa['taxonomy_sha256']}`",
         "",
         "## Input integrity and QA",
@@ -1553,6 +1624,7 @@ def _write_manifest(output_dir: Path, names: Sequence[str]) -> dict[str, Any]:
     manifest = {
         "work_order": WORK_ORDER,
         "schema_version": SCHEMA_VERSION,
+        "scope_classifier_version": SCOPE_CLASSIFIER_VERSION,
         "status": "PASS",
         "manifest_self_hash": "omitted_to_avoid_recursive_hash",
         "artifacts": artifacts,
