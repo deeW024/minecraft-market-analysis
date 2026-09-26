@@ -244,6 +244,7 @@ def test_production_fixture_exports_reconcile_and_replay(tmp_path):
     qa_b = build_category_signal_layer(input_db, output_b, code_commit="fixture-commit", enforce_pinned_inputs=False)
     assert input_before == sha256_file(input_db)
     assert qa_a["status"] == qa_b["status"] == "PASS"
+    assert qa_a["delivery_status"] == "CATEGORY_SIGNAL_LAYER_READY_FOR_SUPERVISOR_REVIEW"
     assert all(qa_a["checks"].values()) and all(qa_b["checks"].values())
     assert qa_a["row_counts"] == {
         "source_scope_coverage": 2,
@@ -304,6 +305,8 @@ def test_production_fixture_exports_reconcile_and_replay(tmp_path):
     assert c1_hangar["price_quantiles_by_currency"] is None
 
     manifest = json.loads((output_a / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
+    assert manifest["delivery_status"] == "CATEGORY_SIGNAL_LAYER_READY_FOR_SUPERVISOR_REVIEW"
+    assert "Status: `CATEGORY_SIGNAL_LAYER_READY_FOR_SUPERVISOR_REVIEW`" in (output_a / "FINAL_REPORT.md").read_text(encoding="utf-8")
     assert len(manifest["artifacts"]) == 16
     assert {entry["path"] for entry in manifest["artifacts"]} == {path.name for path in output_a.iterdir() if path.name != "DATASET_MANIFEST.json"}
 

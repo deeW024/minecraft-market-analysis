@@ -18,6 +18,7 @@ from .pipeline import quantile
 
 WORK_ORDER = "YEE-73"
 SIGNAL_SCHEMA_VERSION = "yee-73-category-signal-layer-v0.1"
+DELIVERY_STATUS = "CATEGORY_SIGNAL_LAYER_READY_FOR_SUPERVISOR_REVIEW"
 YEE61_MERGE_COMMIT = "a0b838f525017e6d132005778cd9a468fae92564"
 YEE61_DB_SHA256 = "12fa10a45a98df954c220f741a21ae8c8ed537a953415954e71fdab23bdd17ed"
 YEE61_MEMBERSHIPS_SHA256 = "e4254b9ccdb4e051036b3a7ce46f5a6b59b42be578e2fe0d5a66c5af988a993b"
@@ -927,6 +928,7 @@ def _manifest(output: Path, run_metadata: Mapping[str, Any]) -> dict[str, Any]:
         artifacts.append({"path": name, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)})
     return {
         "work_order": WORK_ORDER,
+        "delivery_status": DELIVERY_STATUS,
         "signal_schema_version": SIGNAL_SCHEMA_VERSION,
         "run_id": run_metadata["run_id"],
         "input": {
@@ -954,7 +956,8 @@ def _final_report(qa: Mapping[str, Any]) -> str:
     lines = [
         "# YEE-73 final report",
         "",
-        f"Status: `{qa['status']}`",
+        f"Status: `{qa['delivery_status']}`",
+        f"Production QA: `{qa['status']}`",
         "",
         "## Scope and provenance",
         "",
@@ -1196,6 +1199,7 @@ def build_category_signal_layer(
     coverage_by_source = {row["source"]: row for row in tables["source_scope_coverage"]}
     qa = {
         "work_order": WORK_ORDER,
+        "delivery_status": DELIVERY_STATUS,
         "status": "PASS",
         "signal_schema_version": SIGNAL_SCHEMA_VERSION,
         "run_id": run_metadata["run_id"],
