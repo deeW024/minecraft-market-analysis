@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 WORK_ORDER = "YEE-61"
 SCHEMA_VERSION = "yee-61-category-first-foundation-v0.1"
-SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.5"
+SCOPE_CLASSIFIER_VERSION = "yee-61-product-form-semantic-guard-v0.6"
 ASSIGNMENT_VERSION = "yee-61-category-assignment-v0.1"
 TAXONOMY_VERSION = "yee-61-functional-category-taxonomy-v0.1"
 YEE60_CLASSIFIER_VERSION = "yee-60-source-native-plugin-classifier-v0.1"
@@ -42,6 +42,11 @@ KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES = (
 POSITIVE_CONFIRMATION_FIXTURE_IDENTITIES = (
     "hangar:2343", "voxel:1134", "voxel:6587", "voxel:942",
     "voxel:986", "voxel:4803", "voxel:5542", "voxel:2895",
+)
+# Evidence-only regression fixtures from the final product-form supervisor review.
+# They are rendered/verified as examples and never used to make row decisions.
+FINAL_PRODUCT_FORM_FIXTURE_IDENTITIES = (
+    "voxel:5784", "voxel:6436", "voxel:6314", "voxel:7983", "voxel:2721", "voxel:3448",
 )
 
 PLUGIN_PRODUCT_CONFIRMED = "PLUGIN_PRODUCT_CONFIRMED"
@@ -356,10 +361,14 @@ _QA_CONTENT_DEPENDENCY = (
 )
 
 _SELF_PLUGIN_PRODUCT_RULES = (
-    r"\bthis\s+(?:(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+)?plugin\b",
-    r"\b(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+plugin\b",
-    r"\b(?!this\b|the\b|a\b|an\b|that\b|it\b)[\w][\w.'’&+-]*(?:\s+[\w][\w.'’&+-]*){0,3}\s+is\s+(?:a|an)\s+(?:(?:central|server|minecraft|paper)\s+)?plugin\b",
+    r"\bthis\s+(?:(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+)?plugin\b"
+    r"(?=\s*(?:$|[.!?;:,()\[\]{}|–—-])|\s+(?:that|which|for|to|with|using|via|on|is|are|works?|provides?|adds?|allows?|lets?|manages?|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|protects?|restores?|gives?|customi[sz]es?|synchroni[sz]es?|automates?|integrates?|removes?|extends?|restricts?|offers?|supports?|configures?|guides?|does|designed|featuring|version|v\d)\b)",
+    r"\b(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+plugin\b"
+    r"(?=\s*(?:$|[.!?;:,()\[\]{}|–—-])|\s+(?:that|which|for|to|with|using|via|on|is|are|works?|provides?|adds?|allows?|lets?|manages?|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|protects?|restores?|gives?|customi[sz]es?|synchroni[sz]es?|automates?|integrates?|removes?|extends?|restricts?|offers?|supports?|configures?|guides?|does|designed|featuring|version|v\d)\b)",
+    r"\b(?!this\b|the\b|a\b|an\b|that\b|it\b)[\w][\w.'’&+-]*(?:\s+[\w][\w.'’&+-]*){0,3}\s+is\s+(?:a|an)\s+(?:(?:central|server|minecraft|paper)\s+)?plugin\b"
+    r"(?=\s*(?:$|[.!?;:,()\[\]{}|–—-])|\s+(?:that|which|for|to|with|provides?|adds?|allows?|lets?|manages?|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|protects?|restores?|gives?|offers?|supports?|designed|version|v\d)\b)",
     r"\b(?:this|the|a|an)?\s*plugin\s+(?:that|which|allows?|adds?|provides?|manages?|prevents?|connects?|creates?|lets?|enables?|tracks?|controls?)\b",
+    r"\b(?:(?:this|the|a|an)\s+)?(?:(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+)?plugin\s+(?:queues?|schedules?|shoots?|rolls?\s+back|mines?)\b",
 )
 _PLUGIN_DEPENDENCY_PREFIX = re.compile(
     r"\b(?:for|of|to|with|from|using|about|via|translation(?:\s+of)?|translated\s+(?:from|for)|"
@@ -368,16 +377,44 @@ _PLUGIN_DEPENDENCY_PREFIX = re.compile(
     re.IGNORECASE,
 )
 _GENERIC_PLUGIN_MENTION_RULE = r"\bplugins?\b"
+_PLATFORM_PLUGIN_PHRASE = re.compile(
+    r"\b(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+plugins?\b",
+    re.IGNORECASE,
+)
+_PLUGIN_ASSERTION_CONTINUATION = re.compile(
+    r"^(?:that|which|for|to|with|using|via|on|is|are|was|were|has|have|works?|provides?|providing|adds?|adding|"
+    r"allows?|allowing|lets?|manages?|managing|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|"
+    r"protects?|restores?|gives?|queues?|schedules?|shoots?|rolls?|mines?|customi[sz]es?|synchroni[sz]es?|automates?|integrates?|removes?|extends?|restricts?|"
+    r"offers?|supports?|configures?|guides?|does|designed|featuring|based|built|created|made|written|developed|"
+    r"released|compatible|version|v\d|\d)\b",
+    re.IGNORECASE,
+)
 _SOFTWARE_PRODUCT_FORM_RULE = re.compile(
     r"\b(?:tools?|systems?|managers?|handlers?|connectors?|bridges?|limiters?|engines?|utilities|server software)\b|"
     r"\b[\w-]*(?:control|sync|scheduler|guard|core)\b",
     re.IGNORECASE,
 )
 _QA_SELF_PLUGIN_PRODUCT_RULES = (
-    r"\bthis\s+(?:(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+)?plugin\b",
-    r"\b(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+plugin\b",
-    r"\b(?!this\b|the\b|a\b|an\b|that\b|it\b)[\w][\w.'’&+-]*(?:\s+[\w][\w.'’&+-]*){0,3}\s+is\s+(?:a|an)\s+(?:(?:central|server|minecraft|paper)\s+)?plugin\b",
+    r"\bthis\s+(?:(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+)?plugin\b"
+    r"(?=\s*(?:$|[.!?;:,()\[\]{}|–—-])|\s+(?:that|which|for|to|with|using|via|on|is|are|works?|provides?|adds?|allows?|lets?|manages?|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|protects?|restores?|gives?|customi[sz]es?|synchroni[sz]es?|automates?|integrates?|removes?|extends?|restricts?|offers?|supports?|configures?|guides?|does|designed|featuring|version|v\d)\b)",
+    r"\b(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+plugin\b"
+    r"(?=\s*(?:$|[.!?;:,()\[\]{}|–—-])|\s+(?:that|which|for|to|with|using|via|on|is|are|works?|provides?|adds?|allows?|lets?|manages?|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|protects?|restores?|gives?|customi[sz]es?|synchroni[sz]es?|automates?|integrates?|removes?|extends?|restricts?|offers?|supports?|configures?|guides?|does|designed|featuring|version|v\d)\b)",
+    r"\b(?!this\b|the\b|a\b|an\b|that\b|it\b)[\w][\w.'’&+-]*(?:\s+[\w][\w.'’&+-]*){0,3}\s+is\s+(?:a|an)\s+(?:(?:central|server|minecraft|paper)\s+)?plugin\b"
+    r"(?=\s*(?:$|[.!?;:,()\[\]{}|–—-])|\s+(?:that|which|for|to|with|provides?|adds?|allows?|lets?|manages?|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|protects?|restores?|gives?|offers?|supports?|designed|version|v\d)\b)",
     r"\b(?:this|the|a|an)?\s*plugin\s+(?:that|which|allows?|adds?|provides?|manages?|prevents?|connects?|creates?|lets?|enables?|tracks?|controls?)\b",
+    r"\b(?:(?:this|the|a|an)\s+)?(?:(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+)?plugin\s+(?:queues?|schedules?|shoots?|rolls?\s+back|mines?)\b",
+)
+_QA_PLATFORM_PLUGIN_PHRASE = re.compile(
+    r"\b(?:minecraft|paper|spigot|bukkit|velocity|bungeecord|waterfall|purpur)\s+plugins?\b",
+    re.IGNORECASE,
+)
+_QA_PLUGIN_ASSERTION_CONTINUATION = re.compile(
+    r"^(?:that|which|for|to|with|using|via|on|is|are|was|were|has|have|works?|provides?|providing|adds?|adding|"
+    r"allows?|allowing|lets?|manages?|managing|maintains?|prevents?|connects?|creates?|enables?|tracks?|controls?|"
+    r"protects?|restores?|gives?|queues?|schedules?|shoots?|rolls?|mines?|customi[sz]es?|synchroni[sz]es?|automates?|integrates?|removes?|extends?|restricts?|"
+    r"offers?|supports?|configures?|guides?|does|designed|featuring|based|built|created|made|written|developed|"
+    r"released|compatible|version|v\d|\d)\b",
+    re.IGNORECASE,
 )
 _QA_EXECUTABLE_PRODUCT_FORM = re.compile(
     r"\b(?:tools?|systems?|managers?|handlers?|connectors?|bridges?|limiters?|engines?|utilities|server software)\b|"
@@ -679,6 +716,24 @@ def _dependency_qualifies_plugin_mention(text: str, start: int) -> bool:
     return bool(_PLUGIN_DEPENDENCY_PREFIX.search(text[clause_start:start]))
 
 
+def _attributive_platform_plugin_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
+    found = []
+    for field in ("title", "summary"):
+        text = _text(row, field)
+        for match in _PLATFORM_PLUGIN_PHRASE.finditer(text):
+            if _dependency_qualifies_plugin_mention(text, match.start()):
+                continue
+            tail = text[match.end():].lstrip()
+            if tail and not re.match(r"[.!?;:,()\[\]{}|–—-]", tail) and not _PLUGIN_ASSERTION_CONTINUATION.match(tail):
+                found.append({
+                    "reason_code": "ATTRIBUTIVE_PLATFORM_PLUGIN_PHRASE_NOT_SELF_PRODUCT",
+                    "field": field,
+                    "text_span": f"{match.group(0)} {tail.split(None, 1)[0]}",
+                    "rule_pattern": "platform_plugin_phrase_lacks_assertive_grammatical_continuation",
+                })
+    return found
+
+
 def _direct_plugin_product_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     for field in ("title", "summary"):
@@ -849,6 +904,61 @@ def _independent_unsafe_generic_plugin_confirmation(row: Mapping[str, Any]) -> b
     )
 
 
+def _independent_voxel_behavior_form_confirmation(row: Mapping[str, Any]) -> bool:
+    """Independently reject Voxel confirmations based only on behavior and generic software form."""
+    if row.get("source") != "voxel":
+        return False
+    combined = "\n".join(_text(row, field) for field in ("title", "summary"))
+    behavior = re.search(
+        r"\b(?:adds?|allows?|lets?|provides?|providing|enables?|prevents?|manages?|tracks?|controls?|customi[sz]es?|"
+        r"synchroni[sz]es?|syncs?|executes?|connects?|integrates?|automates?|removes?|creates?|makes?|turns?|gives?|"
+        r"extends?|restricts?|shoots?|rolls?\s+back|restores?|queues?|schedules?|protects?|mines?)\b",
+        combined,
+        re.IGNORECASE,
+    )
+    software_form = _QA_EXECUTABLE_PRODUCT_FORM.search(combined)
+    has_self_assertion = False
+    independent_dependency = re.compile(
+        r"\b(?:for|of|to|with|from|using|about|via|translation(?:\s+of)?|translated\s+(?:from|for)|"
+        r"language\s+(?:of|for)|template\s+for|setup\s+for|ui\s+for|design\s+for|add-on\s+for|addon\s+for|"
+        r"du|de|del|des|le|la|les)\s+(?:[\w][\w.'’&-]*\s+){0,5}$",
+        re.IGNORECASE,
+    )
+    for field in ("title", "summary"):
+        text = _text(row, field)
+        for pattern in _QA_SELF_PLUGIN_PRODUCT_RULES:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                clause = re.split(r"[.!?;|\n]", text[:match.start()])[-1]
+                if not independent_dependency.search(clause):
+                    has_self_assertion = True
+                    break
+            if has_self_assertion:
+                break
+        if has_self_assertion:
+            break
+    return bool(behavior and software_form and not has_self_assertion)
+
+
+def _independent_attributive_platform_plugin_confirmation(row: Mapping[str, Any]) -> bool:
+    """Scan raw marketplace text for platform-plugin phrases used as modifiers."""
+    dependency_prefix = re.compile(
+        r"\b(?:for|of|to|with|from|using|about|via|translation(?:\s+of)?|translated\s+(?:from|for)|"
+        r"language\s+(?:of|for)|template\s+for|setup\s+for|ui\s+for|design\s+for|add-on\s+for|addon\s+for|"
+        r"du|de|del|des|le|la|les)\s+(?:[\w][\w.'’&-]*\s+){0,5}$",
+        re.IGNORECASE,
+    )
+    for field in ("title", "summary"):
+        text = _text(row, field)
+        for match in _QA_PLATFORM_PLUGIN_PHRASE.finditer(text):
+            clause = re.split(r"[.!?;|\n]", text[:match.start()])[-1]
+            if dependency_prefix.search(clause):
+                continue
+            remainder = text[match.end():].lstrip()
+            if remainder and not re.match(r"[.!?;:,()\[\]{}|–—-]", remainder) and not _QA_PLUGIN_ASSERTION_CONTINUATION.match(remainder):
+                return True
+    return False
+
+
 def _server_behavior_evidence(row: Mapping[str, Any]) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     for pattern in _SERVER_BEHAVIOR_RULES:
@@ -869,6 +979,7 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
     title_product_form_evidence = _title_level_product_form_evidence(row)
     explicit_non_plugin_evidence = _explicit_non_plugin_product_evidence(row)
     direct_evidence = _direct_plugin_product_evidence(row)
+    attributive_platform_evidence = _attributive_platform_plugin_evidence(row)
     generic_plugin_evidence = _generic_plugin_reference_evidence(row)
     behavior_evidence = _server_behavior_evidence(row)
     compatibility_only = bool(_COMPATIBILITY_ONLY_RULE.search(f"{_text(row, 'title')}\n{_text(row, 'summary')}")) and not direct_evidence and not behavior_evidence
@@ -904,6 +1015,11 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
         reasons = sorted({item["reason_code"] for item in asset_evidence})
         confidence = "HIGH"
         product_evidence = asset_evidence
+    elif attributive_platform_evidence:
+        status = PLUGIN_PRODUCT_REVIEW
+        reasons = ["ATTRIBUTIVE_PLATFORM_PLUGIN_PHRASE_IS_NOT_SELF_PRODUCT_EVIDENCE"]
+        confidence = "LOW"
+        product_evidence = attributive_platform_evidence + generic_plugin_evidence
     elif direct_evidence:
         status = PLUGIN_PRODUCT_CONFIRMED
         reasons = ["PLUGIN_PRODUCT_HIGH_PRECISION_SELF_EVIDENCE"]
@@ -919,7 +1035,11 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
             row,
             _SOFTWARE_PRODUCT_FORM_RULE.pattern,
         )
-        if hangar_function_anchor or software_form_evidence:
+        source_native_hangar_path = row.get("source") == "hangar" and (
+            hangar_function_anchor or software_form_evidence
+        )
+        non_voxel_software_path = row.get("source") != "voxel" and software_form_evidence
+        if source_native_hangar_path or non_voxel_software_path:
             status = PLUGIN_PRODUCT_CONFIRMED
             reasons = ["SERVER_PLUGIN_BEHAVIOR_WITH_POSITIVE_PRODUCT_FORM_CUE"]
             confidence = "MEDIUM"
@@ -937,10 +1057,15 @@ def classify_product_form(row: Mapping[str, Any], eligibility: Mapping[str, Any]
         else:
             status = PLUGIN_PRODUCT_REVIEW
             reasons = ["SERVER_BEHAVIOR_ALONE_DOES_NOT_ESTABLISH_EXECUTABLE_PLUGIN_FORM"]
+            if row.get("source") == "voxel" and software_form_evidence:
+                reasons.append("VOXEL_BEHAVIOR_AND_GENERIC_SOFTWARE_FORM_REQUIRE_SELF_PLUGIN_EVIDENCE")
             if generic_plugin_evidence:
                 reasons.append("GENERIC_PLUGIN_REFERENCE_NOT_SELF_PRODUCT")
             confidence = "LOW"
-            product_evidence = behavior_evidence + generic_plugin_evidence
+            product_evidence = behavior_evidence + generic_plugin_evidence + [
+                {"reason_code": "EXECUTABLE_SOFTWARE_PRODUCT_FORM_CUE", **span}
+                for span in software_form_evidence
+            ]
     else:
         status = PLUGIN_PRODUCT_REVIEW
         reasons = ["PLUGIN_PRODUCT_FORM_NOT_ESTABLISHED"]
@@ -1307,7 +1432,7 @@ def _write_goal_alignment(path: Path, scope_rows: Sequence[Mapping[str, Any]], t
         "The category-first strategy passes. It preserves category diversity, weak categories, negative findings, and uncertainty; it does not require a global winner or autonomous build decision.",
         "",
         "## Required scope hardening",
-        "The accepted YEE-60 set is only a source-native eligibility gate. Product-form evidence is checked before category assignment. Bare/generic plugin mentions do not confirm a product; confirmation requires high-precision self-product language or the existing behavior plus executable-software-form / Hangar source-native path. Explicit non-plugin products are excluded; unclear/conflicting products remain visible as PLUGIN_PRODUCT_REVIEW.",
+        "The accepted YEE-60 set is only a source-native eligibility gate. Product-form evidence is checked before category assignment. Bare/generic plugin mentions do not confirm a product; confirmation requires high-precision self-product language, or the retained Hangar behavior/category path. Voxel behavior plus a generic software-form cue is insufficient without high-precision self-plugin evidence and remains PLUGIN_PRODUCT_REVIEW. Platform-plugin wording confirms only when it is a grammatical self-product assertion, not an attributive phrase such as Minecraft Plugin Installer. Explicit non-plugin products are excluded; unclear/conflicting products remain visible as PLUGIN_PRODUCT_REVIEW.",
         "",
         "## Guard outcome",
         f"- Canonical YEE-60 input rows: {len(scope_rows):,}",
@@ -1360,12 +1485,30 @@ def _write_semantic_smoke(
         "",
         "## Positive-confirmation supervisor fixtures",
         "",
-        "A generic mention such as `the plugin` is not self-product proof, including dependency, translation, template, and UI contexts. Rows without a separate admissible self-product or behavior/product-form basis remain `PLUGIN_PRODUCT_REVIEW`.",
+        "A generic mention such as `the plugin` is not self-product proof, including dependency, translation, template, and UI contexts. Voxel behavior plus a generic software-form cue remains `PLUGIN_PRODUCT_REVIEW` unless high-precision self-plugin evidence exists. Hangar source-native functional-category plus behavior remains an independent admissible path. Platform-plugin wording is accepted only as a grammatical product assertion; an attributive form such as `Minecraft Plugin Installer` is not self-product evidence.",
         "",
         "| Identity | Status | Title | Summary | Scope reasons |",
         "|---|---|---|---|---|",
     ])
     for identity in POSITIVE_CONFIRMATION_FIXTURE_IDENTITIES:
+        scope = scope_by_id.get(identity)
+        if scope is None:
+            continue
+        columns = (
+            identity, scope["product_scope_status"], scope.get("title"), scope.get("summary"),
+            ", ".join(scope["scope_reason_codes"]),
+        )
+        lines.append("| " + " | ".join(_markdown_table_cell(value) for value in columns) + " |")
+    lines.extend([
+        "",
+        "## Final product-form blocker regression fixtures",
+        "",
+        "These source-backed rows are regression evidence for the two v0.6 contract boundaries. The IDs identify test examples only; no identity-specific classification rules are used.",
+        "",
+        "| Identity | Status | Title | Summary | Scope reasons |",
+        "|---|---|---|---|---|",
+    ])
+    for identity in FINAL_PRODUCT_FORM_FIXTURE_IDENTITIES:
         scope = scope_by_id.get(identity)
         if scope is None:
             continue
@@ -1404,7 +1547,7 @@ Only the pinned accepted YEE-60 `plugin_only_resource_features` universe is read
 
 `plugin_product_scope.jsonl/csv` has exactly one row per input identity, sorted `(source, source_resource_id)`. Every input feature field is retained, along with `yee60_plugin_eligibility`, `yee60_eligibility_reason_codes`, `yee60_positive_evidence`, `yee60_classifier_version`, `product_scope_status`, `scope_reason_codes`, `scope_evidence`, `scope_confidence`, `scope_method`, and `scope_classifier_version`.
 
-Statuses are `PLUGIN_PRODUCT_CONFIRMED`, `PLUGIN_PRODUCT_REVIEW`, and `OUT_OF_SCOPE_PRODUCT_FORM`. Only confirmed products can receive category membership. Bare/generic plugin mentions are not positive evidence; confirmation needs high-precision self-product language or the established behavior plus executable-software-form/Hangar category path. Evidence arrays contain the original YEE-60 positive source-native facts and exact title/summary spans used by this deterministic guard. An independent QA invariant rejects confirmations lacking that basis. No model-assisted evidence is used.
+Statuses are `PLUGIN_PRODUCT_CONFIRMED`, `PLUGIN_PRODUCT_REVIEW`, and `OUT_OF_SCOPE_PRODUCT_FORM`. Only confirmed products can receive category membership. Bare/generic plugin mentions are not positive evidence. Confirmation needs high-precision self-product language, or the retained Hangar behavior/source-native functional-category path. Voxel behavior plus a generic software-form cue is insufficient and remains `PLUGIN_PRODUCT_REVIEW` without high-precision self-plugin evidence. A platform-plugin phrase is self-product evidence only when its grammar asserts the listing is a plugin; attributive forms such as `Minecraft Plugin Installer`, `Template`, or `Configuration` do not confirm. Explicit non-plugin products remain `OUT_OF_SCOPE_PRODUCT_FORM`. Evidence arrays contain the original YEE-60 positive source-native facts and exact title/summary spans used by this deterministic guard. Independent QA invariants audit Voxel behavior/form-only confirmations and attributive platform-plugin phrases. No model-assisted evidence is used.
 
 ## Frozen category taxonomy and memberships
 
@@ -1690,6 +1833,23 @@ def _qa_result(
         if row["product_scope_status"] == PLUGIN_PRODUCT_CONFIRMED
         and _independent_unsafe_generic_plugin_confirmation(row)
     ]
+    voxel_behavior_form_confirmations = [
+        row["canonical_identity"]
+        for row in scope_rows
+        if row["product_scope_status"] == PLUGIN_PRODUCT_CONFIRMED
+        and _independent_voxel_behavior_form_confirmation(row)
+    ]
+    attributive_platform_plugin_confirmations = [
+        row["canonical_identity"]
+        for row in scope_rows
+        if row["product_scope_status"] == PLUGIN_PRODUCT_CONFIRMED
+        and _independent_attributive_platform_plugin_confirmation(row)
+    ]
+    final_product_form_fixture_statuses = {
+        row["canonical_identity"]: row["product_scope_status"]
+        for row in scope_rows
+        if row["canonical_identity"] in FINAL_PRODUCT_FORM_FIXTURE_IDENTITIES
+    }
     sqlite_path = output_dir / "category_first_foundation.sqlite"
     db = sqlite3.connect(sqlite_path)
     try:
@@ -1770,8 +1930,14 @@ def _qa_result(
             next(row for row in scope_rows if row["canonical_identity"] == identity)["product_scope_status"] == OUT_OF_SCOPE_PRODUCT_FORM
             for identity in KNOWN_NON_PLUGIN_FIXTURE_IDENTITIES
         ),
+        "final_product_form_regression_fixtures_not_confirmed": (not enforce_pinned_inputs) or (
+            set(final_product_form_fixture_statuses) == set(FINAL_PRODUCT_FORM_FIXTURE_IDENTITIES)
+            and all(status != PLUGIN_PRODUCT_CONFIRMED for status in final_product_form_fixture_statuses.values())
+        ),
         "independent_semantic_contradiction_check_zero": not confirmed_semantic_contradictions,
         "unsafe_generic_plugin_confirmation_check_zero": not unsafe_generic_plugin_confirmations,
+        "voxel_behavior_plus_generic_software_form_requires_self_evidence_check_zero": not voxel_behavior_form_confirmations,
+        "attributive_platform_plugin_phrase_confirmation_check_zero": not attributive_platform_plugin_confirmations,
         "category_membership_equals_confirmed_scope_set": membership_ids == confirmed_ids,
         "no_review_or_out_of_scope_category_leakage": db_leaks == 0,
         "every_confirmed_row_has_exactly_one_primary_or_uncategorized": all_assignments_valid and len(membership_ids) == len(confirmed_ids),
@@ -1824,9 +1990,17 @@ def _qa_result(
             "contradiction_identities": semantic_contradictions,
         },
         "positive_confirmation_audit": {
-            "method": "independent raw title/summary and source-native category checks; does not read classifier reason codes or evidence",
+            "method": "independent raw title/summary and source-native category scans; does not read classifier reason codes or evidence",
             "unsafe_generic_plugin_confirmation_count": len(unsafe_generic_plugin_confirmations),
             "unsafe_generic_plugin_confirmation_identities": unsafe_generic_plugin_confirmations,
+            "voxel_behavior_form_only_confirmation_count": len(voxel_behavior_form_confirmations),
+            "voxel_behavior_form_only_confirmation_identities": voxel_behavior_form_confirmations,
+            "attributive_platform_plugin_confirmation_count": len(attributive_platform_plugin_confirmations),
+            "attributive_platform_plugin_confirmation_identities": attributive_platform_plugin_confirmations,
+        },
+        "final_product_form_regression_audit": {
+            "fixture_identities_are_evidence_only": True,
+            "fixture_statuses": final_product_form_fixture_statuses,
         },
         "taxonomy_version": TAXONOMY_VERSION,
         "taxonomy_sha256": taxonomy["taxonomy_sha256"],
@@ -1846,7 +2020,7 @@ def _final_report(qa: Mapping[str, Any]) -> str:
         "Status: `CATEGORY_FIRST_FOUNDATION_READY_FOR_SUPERVISOR_REVIEW`" if qa["status"] == "PASS" else "Status: `BLOCKED`",
         "",
         "## Objective alignment and scope",
-        "GOAL_ALIGNMENT: `PASS_WITH_REQUIRED_SCOPE_HARDENING`. The accepted YEE-60 PLUGIN_ELIGIBLE universe was narrowed by a source-native product-form semantic guard before category assignment. Generic plugin mentions alone do not confirm; confirmation requires high-precision self-product evidence or the existing behavior plus executable-software-form/Hangar source-native path. Only `PLUGIN_PRODUCT_CONFIRMED` rows enter category membership; review and out-of-scope rows remain in the auditable scope dataset.",
+        "GOAL_ALIGNMENT: `PASS_WITH_REQUIRED_SCOPE_HARDENING`. The accepted YEE-60 PLUGIN_ELIGIBLE universe was narrowed by a source-native product-form semantic guard before category assignment. Generic plugin mentions alone do not confirm; Voxel behavior plus a generic software-form cue remains review without high-precision self-plugin evidence. The existing Hangar behavior/source-native functional-category path remains. Platform-plugin wording must be a grammatical self-product assertion, not an attributive phrase such as `Minecraft Plugin Installer`. Only `PLUGIN_PRODUCT_CONFIRMED` rows enter category membership; review and out-of-scope rows remain in the auditable scope dataset.",
         "",
         f"- Canonical rows: {counts['canonical_input']:,} (Hangar {qa['source_counts'].get('hangar', 0):,}; Voxel {qa['source_counts'].get('voxel', 0):,})",
         f"- PLUGIN_PRODUCT_CONFIRMED: {counts['plugin_product_confirmed']:,}",
@@ -1862,7 +2036,8 @@ def _final_report(qa: Mapping[str, Any]) -> str:
         f"- YEE-60 SQLite SHA-256 before/after: `{qa['input_sha256_before']['plugin_eligibility.sqlite']}` / `{qa['input_sha256_after']['plugin_eligibility.sqlite']}`",
         f"- QA: `{qa['status']}`; passing checks {sum(bool(value) for value in qa['checks'].values())}/{len(qa['checks'])}; failed checks {len(qa['failed_checks'])}.",
         f"- Independent raw-text semantic contradiction audit: {qa['semantic_contradiction_audit']['raw_text_contradiction_identity_count']} contradiction-bearing identities scanned; {qa['semantic_contradiction_audit']['confirmed_contradiction_count']} confirmed contradictions.",
-        f"- Independent positive-confirmation audit: {qa['positive_confirmation_audit']['unsafe_generic_plugin_confirmation_count']} confirmed rows supported only by unsafe generic plugin mentions.",
+        f"- Independent positive-confirmation audit: generic-only {qa['positive_confirmation_audit']['unsafe_generic_plugin_confirmation_count']}; Voxel behavior/form-only {qa['positive_confirmation_audit']['voxel_behavior_form_only_confirmation_count']}; attributive platform-plugin phrase {qa['positive_confirmation_audit']['attributive_platform_plugin_confirmation_count']}.",
+        f"- Final product-form regression fixtures not confirmed: {sum(status != PLUGIN_PRODUCT_CONFIRMED for status in qa['final_product_form_regression_audit']['fixture_statuses'].values())}/{len(FINAL_PRODUCT_FORM_FIXTURE_IDENTITIES)}; identities are evidence-only, not classification rules.",
         f"- Deterministic replay of core exports/database/contracts: `{qa['replay']['byte_identical']}` ({len(qa['replay']['compared_artifacts'])} artifacts).",
         "",
         "## Category-first stop boundary",

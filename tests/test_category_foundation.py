@@ -138,11 +138,13 @@ def test_server_plugin_product_is_confirmed_with_both_evidence_layers():
     [
         ("Claim Guard", "This Paper plugin protects and restores player claims."),
         ("Claim Guard", "A Paper plugin provides claim protection for server operators."),
+        ("Claim Guard", "A Minecraft plugin that protects player claims."),
+        ("Portal Utility", "A Spigot plugin for server operators."),
         ("Claim Guard", "The plugin adds claim protection and manages region rules."),
         ("Claim Guard", "This plugin that manages claims also provides rollback."),
         ("EnderCore", "EnderCore is a central plugin that provides infrastructure."),
     ],
-    ids=("this-platform-plugin", "platform-plugin", "grammatical-plugin-subject", "this-plugin-relative-clause", "named-product-is-plugin"),
+    ids=("this-platform-plugin", "paper-plugin-provides", "minecraft-plugin-relative-clause", "spigot-plugin-for", "grammatical-plugin-subject", "this-plugin-relative-clause", "named-product-is-plugin"),
 )
 def test_high_precision_self_product_language_confirms_plugin(title, summary):
     result = foundation.classify_product_form(_row("self-product", title=title, summary=summary), _eligible())
@@ -220,6 +222,17 @@ def _positive_confirmation_blocker_rows():
         _row("4803", title="CubeRewards - ItemsAdder/Oraxen", summary="DailyRewards plugin UI design with its innovative and high-quality design."),
         _row("5542", title="ItemSkins - UI", summary="Great animated gui design created for the ItemSkins plugin."),
         _row("2895", title="Monkey´Ores", summary="Hi friend! Spice your server with more ores with my ADD-ON for the plugin ITEMSADDER -by lonedev"),
+    ]
+
+
+def _final_product_form_blocker_rows():
+    return [
+        _row("5784", title="cobweb-managment", summary="A simple skript which manages the cobwebs bypassing the worldguard regions."),
+        _row("6436", title="No Durability for skript", summary="Remove durability for your tools, armor and weapons"),
+        _row("6314", title="Server Control Menu - DeluxeMenu", summary="Modern & Professionally Designed Server Control Menu"),
+        _row("7983", title="Player Manager/Statistics menu", summary="This menu allows you some interactions with this player."),
+        _row("2721", title="Pterodactyl Plugin Installer", summary="A Minecraft Plugin Installer for Pterodactyl 1.10.X"),
+        _row("3448", title="Pterodactyl Mod Installer", summary="A Minecraft Plugin Installer for Pterodactyl"),
     ]
 
 
@@ -398,8 +411,50 @@ def test_independent_positive_confirmation_qa_rejects_generic_plugin_only_confir
     assert qa["positive_confirmation_audit"]["unsafe_generic_plugin_confirmation_identities"] == ["voxel:generic-confirmation"]
 
 
+@pytest.mark.parametrize(
+    ("row", "check_name", "audit_key"),
+    [
+        (
+            _row("5784", title="cobweb-managment", summary="A simple skript which manages the cobwebs bypassing the worldguard regions."),
+            "voxel_behavior_plus_generic_software_form_requires_self_evidence_check_zero",
+            "voxel_behavior_form_only_confirmation_identities",
+        ),
+        (
+            _row("2721", title="Pterodactyl Plugin Installer", summary="A Minecraft Plugin Installer for Pterodactyl 1.10.X"),
+            "attributive_platform_plugin_phrase_confirmation_check_zero",
+            "attributive_platform_plugin_confirmation_identities",
+        ),
+    ],
+    ids=("voxel-behavior-form-only", "attributive-platform-plugin"),
+)
+def test_independent_positive_confirmation_qa_rejects_final_product_form_gaps(
+    tmp_path, monkeypatch, row, check_name, audit_key
+):
+    input_db, input_jsonl = _write_fixture_input(tmp_path, [row])
+
+    def false_confirmation(_row, _eligibility):
+        return {
+            "product_scope_status": foundation.PLUGIN_PRODUCT_CONFIRMED,
+            "scope_reason_codes": ["PLUGIN_PRODUCT_HIGH_PRECISION_SELF_EVIDENCE"],
+            "scope_evidence": [],
+            "scope_confidence": "HIGH",
+            "scope_method": "test_false_confirmation",
+            "scope_classifier_version": foundation.SCOPE_CLASSIFIER_VERSION,
+        }
+
+    monkeypatch.setattr(foundation, "classify_product_form", false_confirmation)
+    output_dir = tmp_path / "qa-detects-final-product-form-regression"
+    with pytest.raises(foundation.CategoryFoundationError, match=check_name):
+        foundation.build_category_foundation(input_db, input_jsonl, output_dir, enforce_pinned_inputs=False)
+
+    qa = json.loads((output_dir / "QA_RESULT.json").read_text(encoding="utf-8"))
+    assert qa["checks"][check_name] is False
+    audit = qa["positive_confirmation_audit"]
+    assert audit[audit_key] == [row["canonical_identity"]]
+
+
 def test_supervisor_false_positive_fixture_build_never_enters_category_memberships(tmp_path):
-    rows = _supervisor_blocker_rows() + [row for row, _ in _latest_supervisor_blocker_rows()] + _positive_confirmation_blocker_rows() + [_plugin_dependent_content_fixture()]
+    rows = _supervisor_blocker_rows() + [row for row, _ in _latest_supervisor_blocker_rows()] + _positive_confirmation_blocker_rows() + _final_product_form_blocker_rows() + [_plugin_dependent_content_fixture()]
     assert {row["canonical_identity"] for row in _positive_confirmation_blocker_rows()} == set(foundation.POSITIVE_CONFIRMATION_FIXTURE_IDENTITIES)
     input_db, input_jsonl = _write_fixture_input(tmp_path, rows)
     output_dir = tmp_path / "supervisor-fixtures"
@@ -411,16 +466,20 @@ def test_supervisor_false_positive_fixture_build_never_enters_category_membershi
     assert qa["row_counts"]["plugin_category_memberships"] == 0
     assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 0
     assert qa["positive_confirmation_audit"]["unsafe_generic_plugin_confirmation_count"] == 0
+    assert qa["positive_confirmation_audit"]["voxel_behavior_form_only_confirmation_count"] == 0
+    assert qa["positive_confirmation_audit"]["attributive_platform_plugin_confirmation_count"] == 0
     assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == sum(
         bool(foundation._independent_semantic_contradictions(row)) for row in rows
     )
-    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.5"
+    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.6"
     manifest = json.loads((output_dir / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
     assert manifest["scope_classifier_version"] == qa["scope_classifier_version"]
     assert qa["scope_classifier_version"] in (output_dir / "FINAL_REPORT.md").read_text(encoding="utf-8")
     smoke = (output_dir / "SEMANTIC_SMOKE_TEST.md").read_text(encoding="utf-8")
     assert "## Positive-confirmation supervisor fixtures" in smoke
+    assert "## Final product-form blocker regression fixtures" in smoke
     assert all(f"| {identity} | PLUGIN_PRODUCT_REVIEW |" in smoke for identity in foundation.POSITIVE_CONFIRMATION_FIXTURE_IDENTITIES)
+    assert all(f"| {row['canonical_identity']} | PLUGIN_PRODUCT_REVIEW |" in smoke for row in _final_product_form_blocker_rows())
     assert (output_dir / "plugin_category_memberships.jsonl").read_text(encoding="utf-8") == ""
 
 
@@ -445,16 +504,68 @@ def test_real_plugin_with_configurable_behavior_is_not_misclassified_as_plugin_d
     [
         _row("3450", source="hangar", title="EnderCore", summary="EnderCore is a central plugin that provides essential functions and resources for other plugins."),
         _row("7126", source="hangar", title="VertexCore", summary="Shared core plugin providing configuration, database and command infrastructure for Paper plugins."),
-        _row("7426", title="HardnessControl", summary="Customise the hardness (destroyTime) of blocks through a plugin config file."),
-        _row("9280", title="VortexFileSync", summary="Synchronize your plugin configurations effortlessly across multiple servers."),
     ],
-    ids=("named-plugin-assertion", "hangar-functional-category", "software-control-title", "software-sync-title"),
+    ids=("named-plugin-assertion", "hangar-functional-category"),
 )
-def test_true_plugin_product_and_software_behavior_controls_remain_confirmed(row):
+def test_hangar_behavior_and_source_native_category_controls_remain_confirmed(row):
     result = foundation.classify_product_form(row, _eligible())
 
     assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
     assert foundation._independent_semantic_contradictions(row) == []
+
+
+def test_hangar_behavior_plus_functional_category_remains_confirmation_path():
+    row = _row(
+        "hangar-native-function", source="hangar", title="Operator Permissions",
+        summary="Prevents abuse and manages player permissions for server operators.", category="admin_tools",
+    )
+
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert any(
+        item.get("reason_code") == "HANGAR_SOURCE_NATIVE_FUNCTIONAL_CATEGORY_CONTEXT"
+        for item in result["scope_evidence"]
+    )
+
+
+def test_voxel_high_precision_self_plugin_control_remains_confirmed():
+    row = _row("voxel-self-control", title="Claim Guard", summary="This Paper plugin protects and restores player claims.")
+
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert any(item.get("reason_code") == "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT" for item in result["scope_evidence"])
+
+
+@pytest.mark.parametrize(
+    "row",
+    _final_product_form_blocker_rows()[:4],
+    ids=("cobweb-skript", "skript-durability", "server-control-menu", "player-statistics-menu"),
+)
+def test_voxel_behavior_plus_generic_software_form_requires_self_plugin_evidence(row):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_REVIEW
+    assert "VOXEL_BEHAVIOR_AND_GENERIC_SOFTWARE_FORM_REQUIRE_SELF_PLUGIN_EVIDENCE" in result["scope_reason_codes"]
+
+
+@pytest.mark.parametrize(
+    ("row", "expected_status"),
+    [
+        *[(row, foundation.PLUGIN_PRODUCT_REVIEW) for row in _final_product_form_blocker_rows()[4:]],
+        (_row("attributive-template", title="Pterodactyl Plugin Template", summary="A Minecraft Plugin Template for server owners."), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("attributive-configuration", title="Paper Plugin Configuration", summary="A Paper Plugin Configuration for server operators."), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+    ],
+    ids=("pterodactyl-plugin-installer", "pterodactyl-mod-installer", "platform-plugin-template", "platform-plugin-configuration"),
+)
+def test_attributive_platform_plugin_product_form_is_not_self_plugin_evidence(row, expected_status):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == expected_status
+    if expected_status == foundation.PLUGIN_PRODUCT_REVIEW:
+        assert "ATTRIBUTIVE_PLATFORM_PLUGIN_PHRASE_IS_NOT_SELF_PRODUCT_EVIDENCE" in result["scope_reason_codes"]
+    assert not any(item.get("reason_code") == "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT" for item in result["scope_evidence"])
 
 
 @pytest.mark.parametrize(
@@ -482,7 +593,7 @@ def test_generic_plugin_listing_without_self_product_contract_abstains(row):
 def test_plugin_config_features_are_not_product_form_contradictions(row):
     result = foundation.classify_product_form(row, _eligible())
 
-    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_REVIEW
     assert foundation._independent_semantic_contradictions(row) == []
 
 
