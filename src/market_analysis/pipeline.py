@@ -485,11 +485,11 @@ def create_analysis_schema(conn: sqlite3.Connection) -> None:
         PRIMARY KEY (source, source_resource_id)
     );
     CREATE TABLE segment_facts (
-        {', '.join(f'{column} {"INTEGER" if column in ("resource_count", "demand_available_count") else "REAL" if column.endswith('_p50') or column.startswith('downloads_p') else "TEXT"}' for column in SEGMENT_COLUMNS)},
+        {', '.join(f'{column} {"INTEGER" if column in ("resource_count", "demand_available_count") else "REAL" if column.endswith("_p50") or column.startswith("downloads_p") else "TEXT"}' for column in SEGMENT_COLUMNS)},
         PRIMARY KEY (lens, source, facet_value)
     );
     CREATE TABLE source_distributions (
-        {', '.join(f'{column} {"INTEGER" if column in ("resource_count", "available_count") else "REAL" if column.startswith('p') or column.endswith('_share') or column == 'total' else "TEXT"}' for column in DISTRIBUTION_COLUMNS)},
+        {', '.join(f'{column} {"INTEGER" if column in ("resource_count", "available_count") else "REAL" if column.startswith("p") or column.endswith("_share") or column == "total" else "TEXT"}' for column in DISTRIBUTION_COLUMNS)},
         PRIMARY KEY (distribution, source, metric, bucket)
     );
     """)

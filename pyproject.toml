@@ -17,6 +17,7 @@ yee57-concept-synthesis = "market_analysis.concept_synthesis_cli:main"
 yee59-decision-matrix = "market_analysis.decision_matrix_cli:main"
 yee60-plugin-universe = "market_analysis.plugin_eligibility_cli:main"
 yee61-category-foundation = "market_analysis.category_foundation_cli:main"
+yee73-category-signals = "market_analysis.category_signals_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
