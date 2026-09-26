@@ -129,8 +129,46 @@ def test_server_plugin_product_is_confirmed_with_both_evidence_layers():
 
     assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
     assert result["scope_confidence"] == "HIGH"
-    assert any(item.get("reason_code") == "PLUGIN_PRODUCT_EXPLICIT_TEXT" for item in result["scope_evidence"])
+    assert any(item.get("reason_code") == "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT" for item in result["scope_evidence"])
     assert any(item["evidence_type"] == "YEE60_PLUGIN_ELIGIBILITY" for item in result["scope_evidence"])
+
+
+@pytest.mark.parametrize(
+    ("title", "summary"),
+    [
+        ("Claim Guard", "This Paper plugin protects and restores player claims."),
+        ("Claim Guard", "A Paper plugin provides claim protection for server operators."),
+        ("Claim Guard", "The plugin adds claim protection and manages region rules."),
+        ("Claim Guard", "This plugin that manages claims also provides rollback."),
+        ("EnderCore", "EnderCore is a central plugin that provides infrastructure."),
+    ],
+    ids=("this-platform-plugin", "platform-plugin", "grammatical-plugin-subject", "this-plugin-relative-clause", "named-product-is-plugin"),
+)
+def test_high_precision_self_product_language_confirms_plugin(title, summary):
+    result = foundation.classify_product_form(_row("self-product", title=title, summary=summary), _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
+    assert any(
+        item.get("reason_code") == "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT"
+        for item in result["scope_evidence"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("title", "summary"),
+    [
+        ("Translation", "A translation of the plugin that manages item names."),
+        ("French Language", "Language traduit en français du plugin ItemsAdder."),
+        ("Template", "A template for this plugin that adds furniture."),
+        ("UI Design", "A design created for the plugin that manages player skins."),
+    ],
+    ids=("translation-of", "translated-from", "template-for", "ui-for"),
+)
+def test_plugin_grammar_inside_dependency_context_is_not_self_product_confirmation(title, summary):
+    result = foundation.classify_product_form(_row("dependent-plugin", title=title, summary=summary), _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_REVIEW
+    assert "GENERIC_PLUGIN_REFERENCE_NOT_SELF_PRODUCT" in result["scope_reason_codes"]
 
 
 def _supervisor_blocker_rows():
@@ -159,17 +197,42 @@ def _supervisor_blocker_rows():
 
 def _latest_supervisor_blocker_rows():
     return [
-        (_row("1753", title="BentoBox DeluxeMenu Config", summary="7 Menus | Custom Command Arg Plugin | More soon..."), foundation.PLUGIN_PRODUCT_REVIEW),
-        (_row("1801", title="⚡TAB ⚡ BEST CONFIG | EN |", summary="tab, plugin, config, hub, practice, pvp"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("1753", title="BentoBox DeluxeMenu Config", summary="7 Menus | Custom Command Arg Plugin | More soon..."), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("1801", title="⚡TAB ⚡ BEST CONFIG | EN |", summary="tab, plugin, config, hub, practice, pvp"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
         (_row("2590", title="ItemsAdder Park Plus Furniture", summary="Park furniture Addon for ItemsAdder Plugin"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
-        (_row("4786", title="BoxPvP | Server Setup", summary="Villager Trades, Crates, Combat System, Tags, Custom Holograms, Clan System, Custom Plugin and More"), foundation.PLUGIN_PRODUCT_REVIEW),
-        (_row("5583", title="Plugin Tab And Scoreboard", summary="A Scoreboard And TAB Config"), foundation.PLUGIN_PRODUCT_REVIEW),
-        (_row("6352", title="SternalBoard Premium Config", summary="A Fancy Scoreboard Plugin for your Server | PlaceHolders, Color Gradients & More"), foundation.PLUGIN_PRODUCT_REVIEW),
-        (_row("6479", title="AxTrade Config", summary="Simple plugin to handle most dangeours situations!, With AxTrade make trading more safer!"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("4786", title="BoxPvP | Server Setup", summary="Villager Trades, Crates, Combat System, Tags, Custom Holograms, Clan System, Custom Plugin and More"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("5583", title="Plugin Tab And Scoreboard", summary="A Scoreboard And TAB Config"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("6352", title="SternalBoard Premium Config", summary="A Fancy Scoreboard Plugin for your Server | PlaceHolders, Color Gradients & More"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("6479", title="AxTrade Config", summary="Simple plugin to handle most dangeours situations!, With AxTrade make trading more safer!"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
         (_row("6586", title="FREE Grim anticheat config", summary="Cazu Config | Prevent Falses | Easy to use | AutoBan system"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
-        (_row("7094", title="Spartan Anti Cheat Configuration", summary="plugin, anticheat, for, minecraft, server, cheat, prevention, hack, detection"), foundation.PLUGIN_PRODUCT_REVIEW),
-        (_row("9302", title="Mine Setup + Plugin - English", summary="Minecraft The Movie | Custom Textures | Pickaxe | Mine Ores | Quests | Tab | Shop | Upgrades | Menus"), foundation.PLUGIN_PRODUCT_REVIEW),
+        (_row("7094", title="Spartan Anti Cheat Configuration", summary="plugin, anticheat, for, minecraft, server, cheat, prevention, hack, detection"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
+        (_row("9302", title="Mine Setup + Plugin - English", summary="Minecraft The Movie | Custom Textures | Pickaxe | Mine Ores | Quests | Tab | Shop | Upgrades | Menus"), foundation.OUT_OF_SCOPE_PRODUCT_FORM),
     ]
+
+
+def _positive_confirmation_blocker_rows():
+    return [
+        _row("2343", source="hangar", title="TemplatePlugin", summary="Template for plugin creation - 1.8 - 1.21", category="dev_tools"),
+        _row("1134", title="TemplatePlugin", summary="Template for plugin creation - 1.7.10 - 1.17"),
+        _row("6587", title="MMOItems lang es", summary="MMOItems is a Spanish translation of the plugin with weapons items. If any more are missing, let me"),
+        _row("942", title="FabledSkyblock Traduction FR", summary="Language traduit en français du plugin FabledSkyblock"),
+        _row("986", title="RoyaleEconomy Traduction FR", summary="Language Complet traduit en français du plugin RoyaleEconomy"),
+        _row("4803", title="CubeRewards - ItemsAdder/Oraxen", summary="DailyRewards plugin UI design with its innovative and high-quality design."),
+        _row("5542", title="ItemSkins - UI", summary="Great animated gui design created for the ItemSkins plugin."),
+        _row("2895", title="Monkey´Ores", summary="Hi friend! Spice your server with more ores with my ADD-ON for the plugin ITEMSADDER -by lonedev"),
+    ]
+
+
+@pytest.mark.parametrize("row", _positive_confirmation_blocker_rows(), ids=lambda row: row["canonical_identity"])
+def test_supervisor_positive_confirmation_blockers_are_not_confirmed_by_generic_plugin_mentions(row):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_REVIEW
+    assert "GENERIC_PLUGIN_REFERENCE_NOT_SELF_PRODUCT" in result["scope_reason_codes"]
+    assert any(
+        item.get("reason_code") == "GENERIC_PLUGIN_REFERENCE_NOT_SELF_PRODUCT"
+        for item in result["scope_evidence"]
+    )
 
 
 def _plugin_dependent_content_fixture():
@@ -186,7 +249,7 @@ def test_supervisor_production_false_positives_are_explicitly_out_of_scope(row):
 
     assert result["product_scope_status"] == foundation.OUT_OF_SCOPE_PRODUCT_FORM
     assert any(code.startswith("OUT_OF_SCOPE_") for code in result["scope_reason_codes"])
-    assert not any(item.get("reason_code") == "PLUGIN_PRODUCT_EXPLICIT_TEXT" for item in result["scope_evidence"])
+    assert not any(item.get("reason_code") == "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT" for item in result["scope_evidence"])
 
 
 @pytest.mark.parametrize(
@@ -202,10 +265,14 @@ def test_latest_supervisor_title_product_form_blockers_never_confirm(row, expect
     assert any(
         item.get("reason_code") == "TITLE_LEVEL_NON_PLUGIN_PRODUCT_FORM_CUE"
         or item.get("reason_code") == "OUT_OF_SCOPE_PLUGIN_DEPENDENT_PRODUCT"
+        or item.get("reason_code") == "GENERIC_PLUGIN_REFERENCE_NOT_SELF_PRODUCT"
         for item in result["scope_evidence"]
     )
     if expected == foundation.PLUGIN_PRODUCT_REVIEW:
-        assert "MIXED_TITLE_PRODUCT_FORM_AND_PLUGIN_MENTION" in result["scope_reason_codes"]
+        assert (
+            "GENERIC_PLUGIN_REFERENCE_NOT_SELF_PRODUCT" in result["scope_reason_codes"]
+            or "MIXED_TITLE_PRODUCT_FORM_AND_PLUGIN_MENTION" in result["scope_reason_codes"]
+        )
 
 
 @pytest.mark.parametrize(
@@ -259,8 +326,8 @@ def test_independent_qa_rejects_each_product_form_family_even_if_classifier_conf
     def false_confirmation(_row, _eligibility):
         return {
             "product_scope_status": foundation.PLUGIN_PRODUCT_CONFIRMED,
-            "scope_reason_codes": ["PLUGIN_PRODUCT_EXPLICIT_SOURCE_TEXT"],
-            "scope_evidence": [{"reason_code": "PLUGIN_PRODUCT_EXPLICIT_TEXT", "text_span": "plugin"}],
+            "scope_reason_codes": ["PLUGIN_PRODUCT_HIGH_PRECISION_SELF_EVIDENCE"],
+            "scope_evidence": [{"reason_code": "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT", "text_span": "plugin"}],
             "scope_confidence": "HIGH",
             "scope_method": "test_false_confirmation",
             "scope_classifier_version": foundation.SCOPE_CLASSIFIER_VERSION,
@@ -290,8 +357,8 @@ def test_independent_qa_rejects_false_confirmed_scope_even_if_classifier_claims_
     def false_confirmation(_row, _eligibility):
         return {
             "product_scope_status": foundation.PLUGIN_PRODUCT_CONFIRMED,
-            "scope_reason_codes": ["PLUGIN_PRODUCT_EXPLICIT_SOURCE_TEXT"],
-            "scope_evidence": [{"reason_code": "PLUGIN_PRODUCT_EXPLICIT_TEXT", "text_span": "plugin"}],
+            "scope_reason_codes": ["PLUGIN_PRODUCT_HIGH_PRECISION_SELF_EVIDENCE"],
+            "scope_evidence": [{"reason_code": "PLUGIN_PRODUCT_HIGH_PRECISION_SELF_TEXT", "text_span": "plugin"}],
             "scope_confidence": "HIGH",
             "scope_method": "test_false_confirmation",
             "scope_classifier_version": foundation.SCOPE_CLASSIFIER_VERSION,
@@ -307,8 +374,33 @@ def test_independent_qa_rejects_false_confirmed_scope_even_if_classifier_claims_
     assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 1
 
 
+def test_independent_positive_confirmation_qa_rejects_generic_plugin_only_confirmation(tmp_path, monkeypatch):
+    row = _row("generic-confirmation", title="Language Pack", summary="A translation for the plugin ItemsAdder.")
+    input_db, input_jsonl = _write_fixture_input(tmp_path, [row])
+
+    def false_confirmation(_row, _eligibility):
+        return {
+            "product_scope_status": foundation.PLUGIN_PRODUCT_CONFIRMED,
+            "scope_reason_codes": ["PLUGIN_PRODUCT_HIGH_PRECISION_SELF_EVIDENCE"],
+            "scope_evidence": [],
+            "scope_confidence": "HIGH",
+            "scope_method": "test_false_confirmation",
+            "scope_classifier_version": foundation.SCOPE_CLASSIFIER_VERSION,
+        }
+
+    monkeypatch.setattr(foundation, "classify_product_form", false_confirmation)
+    output_dir = tmp_path / "qa-detects-unsafe-plugin-positive"
+    with pytest.raises(foundation.CategoryFoundationError, match="unsafe_generic_plugin_confirmation_check_zero"):
+        foundation.build_category_foundation(input_db, input_jsonl, output_dir, enforce_pinned_inputs=False)
+
+    qa = json.loads((output_dir / "QA_RESULT.json").read_text(encoding="utf-8"))
+    assert qa["checks"]["unsafe_generic_plugin_confirmation_check_zero"] is False
+    assert qa["positive_confirmation_audit"]["unsafe_generic_plugin_confirmation_identities"] == ["voxel:generic-confirmation"]
+
+
 def test_supervisor_false_positive_fixture_build_never_enters_category_memberships(tmp_path):
-    rows = _supervisor_blocker_rows() + [row for row, _ in _latest_supervisor_blocker_rows()] + [_plugin_dependent_content_fixture()]
+    rows = _supervisor_blocker_rows() + [row for row, _ in _latest_supervisor_blocker_rows()] + _positive_confirmation_blocker_rows() + [_plugin_dependent_content_fixture()]
+    assert {row["canonical_identity"] for row in _positive_confirmation_blocker_rows()} == set(foundation.POSITIVE_CONFIRMATION_FIXTURE_IDENTITIES)
     input_db, input_jsonl = _write_fixture_input(tmp_path, rows)
     output_dir = tmp_path / "supervisor-fixtures"
 
@@ -318,11 +410,17 @@ def test_supervisor_false_positive_fixture_build_never_enters_category_membershi
     assert qa["row_counts"]["plugin_product_confirmed"] == 0
     assert qa["row_counts"]["plugin_category_memberships"] == 0
     assert qa["semantic_contradiction_audit"]["confirmed_contradiction_count"] == 0
-    assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == len(rows)
-    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.4"
+    assert qa["positive_confirmation_audit"]["unsafe_generic_plugin_confirmation_count"] == 0
+    assert qa["semantic_contradiction_audit"]["raw_text_contradiction_identity_count"] == sum(
+        bool(foundation._independent_semantic_contradictions(row)) for row in rows
+    )
+    assert qa["scope_classifier_version"] == "yee-61-product-form-semantic-guard-v0.5"
     manifest = json.loads((output_dir / "DATASET_MANIFEST.json").read_text(encoding="utf-8"))
     assert manifest["scope_classifier_version"] == qa["scope_classifier_version"]
     assert qa["scope_classifier_version"] in (output_dir / "FINAL_REPORT.md").read_text(encoding="utf-8")
+    smoke = (output_dir / "SEMANTIC_SMOKE_TEST.md").read_text(encoding="utf-8")
+    assert "## Positive-confirmation supervisor fixtures" in smoke
+    assert all(f"| {identity} | PLUGIN_PRODUCT_REVIEW |" in smoke for identity in foundation.POSITIVE_CONFIRMATION_FIXTURE_IDENTITIES)
     assert (output_dir / "plugin_category_memberships.jsonl").read_text(encoding="utf-8") == ""
 
 
@@ -349,16 +447,28 @@ def test_real_plugin_with_configurable_behavior_is_not_misclassified_as_plugin_d
         _row("7126", source="hangar", title="VertexCore", summary="Shared core plugin providing configuration, database and command infrastructure for Paper plugins."),
         _row("7426", title="HardnessControl", summary="Customise the hardness (destroyTime) of blocks through a plugin config file."),
         _row("9280", title="VortexFileSync", summary="Synchronize your plugin configurations effortlessly across multiple servers."),
-        _row("9343", title="Free For All Plugin FFA", summary="The ultimate Modern FFA PvP plugin | Editable Kits | Unlimited Kits/Arenas | PAPI"),
-        _row("4464", title="ChestEnergistic - FREE", summary="A plugin setup that tries to bring the style and functions of applied energistics to your server."),
     ],
-    ids=("shared-plugin-resources", "paper-plugin-infrastructure", "own-config-file", "sync-plugin-configs", "free-for-all-name", "plugin-setup-behavior"),
+    ids=("named-plugin-assertion", "hangar-functional-category", "software-control-title", "software-sync-title"),
 )
-def test_true_plugin_product_and_config_behavior_controls_are_not_independent_contradictions(row):
+def test_true_plugin_product_and_software_behavior_controls_remain_confirmed(row):
     result = foundation.classify_product_form(row, _eligible())
 
     assert result["product_scope_status"] == foundation.PLUGIN_PRODUCT_CONFIRMED
     assert foundation._independent_semantic_contradictions(row) == []
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row("9343", title="Free For All Plugin FFA", summary="The ultimate Modern FFA PvP plugin | Editable Kits | Unlimited Kits/Arenas | PAPI"),
+        _row("4464", title="ChestEnergistic - FREE", summary="A plugin setup that tries to bring the style and functions of applied energistics to your server."),
+    ],
+    ids=("title-name-is-not-a-contract", "setup-wording-is-not-a-plugin-claim"),
+)
+def test_generic_plugin_listing_without_self_product_contract_abstains(row):
+    result = foundation.classify_product_form(row, _eligible())
+
+    assert result["product_scope_status"] != foundation.PLUGIN_PRODUCT_CONFIRMED
 
 
 @pytest.mark.parametrize(
