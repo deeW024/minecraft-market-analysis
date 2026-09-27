@@ -1520,7 +1520,7 @@ def _write_reports(
     )
     protocol = (
         "# External research protocol — YEE-77\n\n"
-        "This artifact is a deterministic normalization of the frozen `YEE77_RESEARCH_CAPTURE.json`; rebuilding makes no live web requests. For each accepted option, preserve the issued query execution order and the semantic-resolution, competitor-discovery, and operator pain-point discovery attempts. Per-option limits are 12 queries and 18 retained opened pages; the capture has no individual query timestamps, so `issued_at` uses the frozen capture retrieval time and records that basis. Search results are discovery only. Retained facts cite opened public canonical pages. Each retained direct entity has a product-identity and current lifecycle check. Pricing is source-native and absent pricing is null. Pain statements are individual reports, not prevalence. Ambiguous broad options remain ambiguous; no option is deleted or merged.\n"
+        "This artifact is a deterministic normalization of the hash-pinned frozen `YEE77_RESEARCH_CAPTURE.json`; rebuilding makes no live web requests. For each accepted option, preserve the issued query execution order and the semantic-resolution, competitor-discovery, and operator pain-point discovery attempts. Per-option limits are 12 queries and 18 retained opened pages. Individual query issue times were not captured, so `issued_at` uses the frozen capture retrieval time and each affected row records that fallback basis. Canonicalize URLs before source deduplication. Search results are discovery only; retained facts cite opened public canonical pages. Each retained direct entity has product-identity and current lifecycle evidence/provenance. A slice-specific competitor in an unresolved broad option is adjacent context, not a direction-level direct competitor. Pricing is source-native and absent pricing is null. Pain statements are individual reports, not prevalence. Ambiguous broad options remain ambiguous; no option is deleted or merged.\n"
     )
     (output / "GOAL_ALIGNMENT.md").write_text(goal, encoding="utf-8", newline="\n")
     (output / "EXTERNAL_RESEARCH_PROTOCOL.md").write_text(protocol, encoding="utf-8", newline="\n")
@@ -1570,14 +1570,36 @@ def _write_reports(
             )
         direction_sections.append("\n".join(section))
     status_lines = "\n\n".join(direction_sections)
+    summary = data["normalization_summary"]
+    duplicate_groups = "; ".join(
+        f"{row['canonical_url']} ({', '.join(row['source_id_aliases'])})"
+        for row in summary["deduplicated_source_groups"]
+    ) or "none"
+    fallback_times = sorted({
+        row["issued_at"] for row in data["research_queries"]
+        if row["issued_at_basis"].startswith("frozen_capture_retrieved_at")
+    })
+    fallback_time_text = ", ".join(f"`{value}`" for value in fallback_times) or "none"
+    downgraded_names = sorted(
+        row["entity_name"] for row in data["competitor_entities"]
+        if row["competitor_id"] in summary["direction_level_competitor_downgrade_ids"]
+    )
+    downgraded_direction_ids = {
+        row["direction_id"] for row in data["competitor_entities"]
+        if row["competitor_id"] in summary["direction_level_competitor_downgrade_ids"]
+    }
+    downgraded_directions = sorted({
+        pack["canonical_direction_key"] for pack in data["direction_research_packs"]
+        if pack["direction_id"] in downgraded_direction_ids
+    })
     report = (
         "# YEE-77 Final Report\n\n"
         "## Scope and input\n\n"
         f"Researched all {len(options)} accepted YEE-76 options. Read-only input SHA-256 before/after: `{qa['input_sha256_before']}` / `{qa['input_sha256_after']}`; frozen capture SHA-256: `{qa['replay']['capture_sha256']}`; accepted run `{INPUT_RUN_ID}`; schema `{INPUT_SCHEMA_VERSION}`; taxonomy `{INPUT_TAXONOMY_VERSION}` (`{INPUT_TAXONOMY_SHA256}`); input code commit `{INPUT_CODE_COMMIT}`; YEE-77 execution code commit `{execution_code_commit}`.\n\n"
         "## Results\n\n"
         f"Research statuses: {resolved} RESOLVED, {ambiguous} AMBIGUOUS, {unresolved} UNRESOLVED. All three required query purposes were recorded for every option. The frozen capture contains {data['normalization_summary']['capture_source_document_count']} source records; canonicalization retained {data['normalization_summary']['canonical_source_document_count']} unique source documents and deduplicated {data['normalization_summary']['deduplicated_source_document_count']} duplicate record(s). The capture contains {len(data['research_queries'])} queries, {len(data['external_evidence'])} source-backed observations, {len(data['competitor_entities'])} competitor/adjacent entities, and {len(data['direction_semantic_relations'])} evidence-backed relations. No product ranking, score, winner, recommendation, or merging was performed.\n\n"
-        f"All {data['normalization_summary']['timestamp_fallback_query_count']} retained query rows use `issued_at={data['research_queries'][0]['issued_at']}` from the frozen capture `retrieved_at`; individual query issue times were not captured. Each row records `issued_at_basis` so this fallback is machine-visible and is not presented as an observed issue time.\n\n"
-        f"Direction-level relation guard: {data['normalization_summary']['direction_level_competitor_downgrade_count']} slice-specific competitor relation(s) in unresolved directions were demoted to `ADJACENT` with associated relation evidence reclassified as `ADJACENT_CONTEXT` ({', '.join(data['normalization_summary']['direction_level_competitor_downgrade_ids']) or 'none'}). `abuse_and_spam_controls` remains AMBIGUOUS; Anti Spam and ChatControl describe the chat/command-spam slice only.\n\n"
+        f"Same-canonical-URL source groups: {duplicate_groups}. Individual query issue timestamps were not present in the frozen capture for {summary['timestamp_fallback_query_count']} of {len(data['research_queries'])} queries; those rows use only the captured retrieval time(s) {fallback_time_text}, and each records its `issued_at_basis`.\n\n"
+        f"Direction-level relation guard: {summary['direction_level_competitor_downgrade_count']} slice-specific competitor relation(s) in unresolved directions were demoted to `ADJACENT` with linked relation evidence reclassified as `ADJACENT_CONTEXT` ({', '.join(downgraded_names) or 'none'}; option(s): {', '.join(downgraded_directions) or 'none'}). The direction sections preserve each broad option's research status and capture notes.\n\n"
         f"QA status: **{qa['overall_status']}** ({len(qa['failed_checks'])} failed checks). Frozen-capture deterministic replay: `{qa['replay']['byte_identical']}` across {qa['replay']['artifact_count']} normalized data artifacts.\n\n"
         f"PR #17: OPEN / UNMERGED at execution code commit `{execution_code_commit}`. No live research was repeated and no Stage F work was started.\n\n"
         "## Direction outcomes\n\n"

@@ -154,6 +154,37 @@ def test_url_canonicalization_and_duplicate_source_ids_are_deduplicated_and_rema
     assert data["research_queries"][0]["result_source_ids"].count("s-market") == 1
 
 
+def test_reused_source_id_for_distinct_canonical_urls_is_rejected():
+    options, _, capture = _fixture()
+    duplicate = dict(capture["source_documents"][0])
+    duplicate["canonical_url"] = "https://different.example/other"
+    capture["source_documents"].append(duplicate)
+
+    with pytest.raises(ValueError, match="reused for different canonical URLs"):
+        research._normalise_capture(options, capture)
+
+
+def test_query_timestamp_fallback_is_explicit_and_matches_capture_time():
+    options, categories, capture = _fixture()
+    capture["research_queries"][0]["issued_at"] = "2026-09-27T13:00:00Z"
+    data = research._normalise_capture(options, capture)
+    data["category_research_coverage"] = research._build_coverage(
+        categories, data["direction_research_packs"], data["competitor_entities"],
+        data["direction_semantic_relations"], data["external_evidence"], data["research_queries"],
+    )
+    qa = research._qa(options, categories, data, research.INPUT_SHA256)
+
+    assert data["research_queries"][0]["issued_at_basis"] == "captured_individual_query_timestamp"
+    assert data["research_queries"][1]["issued_at"] == capture["retrieved_at"]
+    assert data["research_queries"][1]["issued_at_basis"].startswith("frozen_capture_retrieved_at")
+    assert data["normalization_summary"]["timestamp_fallback_query_count"] == 2
+    assert qa["checks"]["query_issued_timestamps_have_explicit_or_disclosed_fallback_basis"]
+
+    data["research_queries"][1]["issued_at"] = "2026-09-27T12:00:00Z"
+    qa = research._qa(options, categories, data, research.INPUT_SHA256)
+    assert not qa["checks"]["query_issued_timestamps_have_explicit_or_disclosed_fallback_basis"]
+
+
 def test_unavailable_source_cannot_support_retained_evidence():
     options, _, capture = _fixture()
     capture["source_documents"][0]["access_status"] = "UNAVAILABLE_AFTER_ATTEMPT"
@@ -357,6 +388,11 @@ def test_semantic_relation_enum_is_category_local_and_does_not_mutate_option_ids
     assert data["direction_semantic_relations"][0]["relation_type"] == "SUBSTANTIAL_OVERLAP"
     assert next(row for row in data["external_evidence"] if row["evidence_id"] == "e-overlap")["claim_type"] == "OVERLAP_SIGNAL"
 
+    capture["direction_semantic_relations"][0]["relation_type"] = "NOT_ALLOWED"
+    with pytest.raises(ValueError, match="Unknown semantic relation type"):
+        research._normalise_capture(options, capture)
+
+    capture["direction_semantic_relations"][0]["relation_type"] = "OVERLAP_SIGNAL"
     other = dict(second, direction_id="dir_other_category", category_id="gameplay")
     options.append(other)
     capture["pack_notes"][other["direction_id"]] = {"research_status": "AMBIGUOUS"}
@@ -497,7 +533,12 @@ def test_exact_16_options_all_11_categories_replay_exports_and_input_immutabilit
     assert qa["overall_status"] == "PASS", (qa["failed_checks"], qa["replay"])
     assert qa["option_count"] == 16
     assert qa["category_count"] == 11
+    assert qa["checks"]["exact_16_option_identity_reconciliation"]
+    assert qa["checks"]["all_11_taxonomy_category_coverage_rows"]
+    assert qa["checks"]["exact_researched_and_zero_option_category_statuses"]
+    assert qa["checks"]["sqlite_foreign_key_reference_tables_match_normalized_rows"]
     assert qa["replay"]["byte_identical"]
+    assert qa["replay"]["artifact_count"] == 17
     assert qa["input_sha256_before"] == original_sha == qa["input_sha256_after"]
     packs = [json.loads(line) for line in (output / "direction_research_packs.jsonl").read_text(encoding="utf-8").splitlines()]
     coverage = [json.loads(line) for line in (output / "category_research_coverage.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -535,5 +576,6 @@ def test_sqlite_integrity_foreign_keys_and_csv_jsonl_reconciliation(tmp_path):
     assert qa["checks"]["sqlite_foreign_key_check"]
     assert qa["checks"]["sqlite_table_counts_reconcile"]
     assert qa["checks"]["sqlite_frozen_options_match_accepted_input"]
+    assert qa["checks"]["sqlite_foreign_key_reference_tables_match_normalized_rows"]
     assert qa["checks"]["jsonl_csv_values_and_row_counts_reconcile"]
     assert qa["overall_status"] == "PASS"
