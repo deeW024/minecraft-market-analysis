@@ -136,3 +136,19 @@ Run `yee76-category-opportunity-map` with `--input-db`, `--output-dir`, and
 `CATEGORY_OPPORTUNITY_SEMANTICS.md` for the state precedence, evidence rules,
 null semantics, and outputs. The input is checked against its accepted SHA,
 run metadata, taxonomy, row counts, and read-only hash-before/after integrity.
+
+## YEE-78 Supervisor/User decision gate
+
+YEE-78 consumes only the accepted YEE-77 category-targeted research SQLite
+read-only. It preserves the exact 16 directions, all 11 categories, both
+accepted overlap relations, and source/evidence provenance. It derives
+readiness and future validation gaps/questions without ranking, scoring,
+shortlisting, recommending, or selecting directions.
+
+Run yee78-decision-gate with --input-db <accepted-YEE-77.sqlite> and
+--output-dir <new-output-directory> from a clean committed worktree. The
+command fails closed unless the input hash/schema/provenance/counts match the
+accepted YEE-77 pins, emits deterministic JSONL/CSV/SQLite/brief/report/QA/
+manifest artifacts, checks input immutability, and performs a byte-identical
+bundle replay. See DECISION_GATE_SCHEMA.md for field, null, readiness, gap,
+and provenance semantics. No network or marketplace research is performed.
