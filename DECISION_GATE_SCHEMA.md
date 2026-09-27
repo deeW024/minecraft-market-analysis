@@ -46,7 +46,9 @@ The YEE-78-only fields are:
   competitor maintenance states.
 - overlap_context: relation IDs and full member context; no identity merge.
 - uncertainty_context: accepted risks, caveats, ambiguity, coverage and query
-  timestamp provenance.
+  timestamp provenance. The accepted YEE-77 category_research_coverage.coverage_notes
+  scalar string is carried as one complete note in category_coverage_notes;
+  it is never iterated into individual characters.
 - validation_gap_codes, validation_question_ids, allowed_human_actions.
 - evidence_ids, source_ids, competitor_ids, semantic_relation_ids.
 
@@ -67,7 +69,9 @@ attractiveness, ranking, or recommendation.
 Exactly 11 rows preserve category_id, frozen order/name,
 category_opportunity_state, Stage E category_research_status, option IDs,
 readiness and research status counts, overlap-group IDs, and coverage
-caveats. A category with no Stage E options remains visible. Where the
+caveats. A scalar coverage_notes value is represented as a one-element list
+containing the unchanged full string (an empty or null value remains an empty
+list). A category with no Stage E options remains visible. Where the
 accepted YEE-77 SQLite contains no category opportunity state for a
 zero-option category, the value is JSON null with an explicit unavailable-state
 basis; no prohibited upstream side input is used to reconstruct it.

@@ -257,6 +257,16 @@ def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _note_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return list(value)
+    raise DecisionGateError("YEE-77 coverage_notes must be a string, list, or null")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -773,7 +783,7 @@ def _build_decision_rows(snapshot: InputSnapshot) -> dict[str, list[dict[str, An
             if basis and basis != "PROVIDED":
                 fallback_queries[basis].append(query["query_id"])
         category_info = coverage[option["category_id"]]
-        coverage_notes = list(category_info.get("coverage_notes") or [])
+        coverage_notes = _note_values(category_info.get("coverage_notes"))
         coverage_risks = list(category_info.get("risk_notes") or [])
         ambiguity_statement = (
             None if status != "AMBIGUOUS"
@@ -955,7 +965,7 @@ def _build_decision_rows(snapshot: InputSnapshot) -> dict[str, list[dict[str, An
             "research_status_counts": {value: research_counts.get(value, 0) for value in RESEARCH_STATUSES},
             "overlap_group_ids": sorted(row["relation_id"] for row in groups_by_category.get(category_id, [])),
             "evidence_caveats": {
-                "coverage_notes": list(category_pack.get("coverage_notes") or []),
+                "coverage_notes": _note_values(category_pack.get("coverage_notes")),
                 "risk_notes": list(category_pack.get("risk_notes") or []),
                 "taxonomy_ambiguity_notes": list(category.get("known_ambiguity_risk_notes") or []),
                 "no_options_means_no_stage_e_option_not_no_market": len(category_cards) == 0,
@@ -1575,6 +1585,7 @@ def _qa(
     with sqlite3.connect(output / "decision_gate.sqlite") as connection:
         run_metadata = dict(connection.execute("SELECT key,value FROM run_metadata"))
     goal_alignment_text = (output / "GOAL_ALIGNMENT.md").read_text(encoding="utf-8")
+    brief_text = (output / "DECISION_GATE_BRIEF.md").read_text(encoding="utf-8")
     relation_ids_by_direction: dict[str, set[str]] = defaultdict(set)
     for relation in snapshot.relations:
         relation_ids_by_direction[relation["direction_id"]].add(relation["relation_id"])
@@ -1738,10 +1749,20 @@ def _qa(
             category["category_research_status"]
             == coverage_by_id[category["category_id"]]["category_research_status"]
             and category["evidence_caveats"]["coverage_notes"]
-            == list(coverage_by_id[category["category_id"]].get("coverage_notes") or [])
+            == _note_values(coverage_by_id[category["category_id"]].get("coverage_notes"))
             and category["evidence_caveats"]["risk_notes"]
             == list(coverage_by_id[category["category_id"]].get("risk_notes") or [])
             for category in categories
+        ),
+        "direction_cards_preserve_category_coverage_notes": all(
+            card["uncertainty_context"]["category_coverage_notes"]
+            == _note_values(coverage_by_id[card["category_id"]].get("coverage_notes"))
+            for card in cards
+        ),
+        "decision_brief_preserves_category_coverage_notes": all(
+            note in brief_text
+            for category in snapshot.category_coverage
+            for note in _note_values(category.get("coverage_notes"))
         ),
         "evidence_profile_counts_and_provenance_reconcile": all(
             card["evidence_profile"]["evidence_count"] == len(pack_by_id[card["direction_id"]]["evidence_ids"])

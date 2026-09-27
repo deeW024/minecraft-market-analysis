@@ -286,7 +286,7 @@ def make_snapshot() -> gate.InputSnapshot:
             "option_ids": sorted(row["direction_id"] for row in option_rows),
             "research_status_counts": {},
             "coverage_status_counts": {},
-            "coverage_notes": [f"Fixture coverage context for {category_id}."],
+            "coverage_notes": f"Fixture coverage context for {category_id}.",
             "risk_notes": [],
             "evidence_count": 0,
             "query_count": 0,
@@ -422,6 +422,45 @@ def test_zero_option_categories_stay_visible_with_explicit_null_state():
         for row in empty
     )
     assert all(row["evidence_caveats"]["no_options_means_no_stage_e_option_not_no_market"] for row in empty)
+
+
+def test_scalar_coverage_notes_remain_one_note_in_cards_context_sqlite_and_brief(tmp_path):
+    snapshot = make_snapshot()
+    assert all(isinstance(row["coverage_notes"], str) for row in snapshot.category_coverage)
+    rows = gate._build_decision_rows(snapshot)
+    expected = "Fixture coverage context for gameplay."
+    gameplay_cards = [row for row in rows["cards"] if row["category_id"] == "gameplay"]
+    gameplay_context = next(row for row in rows["categories"] if row["category_id"] == "gameplay")
+
+    assert gameplay_cards
+    assert all(row["uncertainty_context"]["category_coverage_notes"] == [expected] for row in gameplay_cards)
+    assert gameplay_context["evidence_caveats"]["coverage_notes"] == [expected]
+
+    brief = gate._brief(rows)
+    assert f"Category evidence/coverage caveats: {expected}" in brief
+    assert " | ".join(expected) not in brief
+
+    output = tmp_path / "scalar-coverage-notes"
+    metadata = gate._run_metadata(snapshot, "a" * 40, gate._source_field_summary(rows["cards"]))
+    gate._write_core(output, snapshot, rows, metadata, gate._input_provenance(snapshot))
+    exported_cards = gate._read_jsonl(output / "decision_direction_cards.jsonl")
+    exported_context = gate._read_jsonl(output / "category_decision_context.jsonl")
+    assert all(
+        row["uncertainty_context"]["category_coverage_notes"] == [expected]
+        for row in exported_cards if row["category_id"] == "gameplay"
+    )
+    assert next(row for row in exported_context if row["category_id"] == "gameplay")[
+        "evidence_caveats"]["coverage_notes"] == [expected]
+
+    with sqlite3.connect(output / "decision_gate.sqlite") as connection:
+        stored_card = json.loads(connection.execute(
+            "SELECT record_json FROM decision_direction_cards WHERE category_id='gameplay' LIMIT 1"
+        ).fetchone()[0])
+        stored_context = json.loads(connection.execute(
+            "SELECT record_json FROM category_decision_context WHERE category_id='gameplay'"
+        ).fetchone()[0])
+    assert stored_card["uncertainty_context"]["category_coverage_notes"] == [expected]
+    assert stored_context["evidence_caveats"]["coverage_notes"] == [expected]
 
 
 def test_both_overlap_relations_are_preserved_without_merging():
