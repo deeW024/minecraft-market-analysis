@@ -121,3 +121,18 @@ artifacts, and requires byte-identical deterministic replay. See
 `DECISION_SCHEMA.md` for field semantics and null handling. A dominated
 evidence profile is not a rejection or quality judgment; the frontier is not a
 ranking or build recommendation.
+
+## YEE-76 category opportunity map
+
+YEE-76 consumes only the hash-pinned, accepted YEE-75 category-direction SQLite
+read-only. It preserves all 11 frozen categories, derives source-aware category
+evidence profiles and deterministic opportunity states, and carries the exact
+Stage C ADVANCE/WATCH directions as unranked category-local research options.
+It does not perform external research, score or rank categories, recommend a
+product, or begin Stage E.
+
+Run `yee76-category-opportunity-map` with `--input-db`, `--output-dir`, and
+`--code-commit`; see `CATEGORY_OPPORTUNITY_SCHEMA.md` and
+`CATEGORY_OPPORTUNITY_SEMANTICS.md` for the state precedence, evidence rules,
+null semantics, and outputs. The input is checked against its accepted SHA,
+run metadata, taxonomy, row counts, and read-only hash-before/after integrity.

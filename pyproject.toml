@@ -19,6 +19,7 @@ yee60-plugin-universe = "market_analysis.plugin_eligibility_cli:main"
 yee61-category-foundation = "market_analysis.category_foundation_cli:main"
 yee73-category-signals = "market_analysis.category_signals_cli:main"
 yee75-category-directions = "market_analysis.category_directions_cli:main"
+yee76-category-opportunity-map = "market_analysis.category_opportunity_map_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
