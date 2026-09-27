@@ -1782,7 +1782,8 @@ def _write_core_artifacts(
     artifacts.append(database_path)
     if capture_path is not None:
         capture_copy = output / "YEE77_RESEARCH_CAPTURE.json"
-        shutil.copyfile(capture_path, capture_copy)
+        if capture_copy.resolve() != capture_path.resolve():
+            shutil.copyfile(capture_path, capture_copy)
         artifacts.append(capture_copy)
     return artifacts
 

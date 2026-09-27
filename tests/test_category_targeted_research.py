@@ -579,3 +579,24 @@ def test_sqlite_integrity_foreign_keys_and_csv_jsonl_reconciliation(tmp_path):
     assert qa["checks"]["sqlite_foreign_key_reference_tables_match_normalized_rows"]
     assert qa["checks"]["jsonl_csv_values_and_row_counts_reconcile"]
     assert qa["overall_status"] == "PASS"
+
+
+def test_core_writer_keeps_capture_when_source_already_is_destination(tmp_path):
+    options, categories, capture = _fixture()
+    data = research._normalise_capture(options, capture)
+    data["category_research_coverage"] = research._build_coverage(
+        categories, data["direction_research_packs"], data["competitor_entities"],
+        data["direction_semantic_relations"], data["external_evidence"], data["research_queries"],
+    )
+    output = tmp_path / "bundle"
+    output.mkdir()
+    capture_path = output / "YEE77_RESEARCH_CAPTURE.json"
+    capture_path.write_text(json.dumps(capture), encoding="utf-8", newline="\n")
+    capture_sha = research.sha256_file(capture_path)
+
+    artifacts = research._write_core_artifacts(
+        output, "fixture", "a" * 40, categories, options, data, capture_path,
+    )
+
+    assert capture_path in artifacts
+    assert research.sha256_file(capture_path) == capture_sha
