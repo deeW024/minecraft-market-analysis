@@ -18,10 +18,12 @@ from market_analysis.category_directions import (
     _coverage_risk,
     _demand_strength,
     _first_nonempty_sentence,
+    _functional_cohesion_guard,
     _load_input,
     _mine_lexical_directions,
     _normalized_tokens,
     _observed_supply_band,
+    _qa_functional_cohesion_guard,
     _qa_functional_direction_guard,
     _representative_members,
     _source_direction_fact,
@@ -195,23 +197,30 @@ def test_first_nonempty_summary_sentence_is_selected_deterministically():
     assert [row["token"] for row in _capped_surface_tokens("Alpha   beta, gamma", cap=10)] == ["alpha"]
 
 
-def test_lexical_discovery_is_category_local_gated_and_collapses_exact_member_set_aliases(loaded_fixture):
+def test_lexical_discovery_is_category_local_and_prefers_functionally_informative_aliases(loaded_fixture):
     _, loaded = loaded_fixture
-    directions, memberships, exclusions = _mine_lexical_directions(loaded)
+    rows = [
+        _member(
+            "hangar", f"cohesion-{index}", "c1", "s1" if index < 3 else "s2",
+            "Death Message" if index < 3 else f"Neutral Product {index}",
+            summary="Custom recipes and death message." if index < 3 else "No shared function.",
+        )
+        for index in range(6)
+    ]
+    rows.append(_member("hangar", "category-local-only", "c2", "s3", "Death Message"))
+    directions, memberships, exclusions = _mine_lexical_directions(dict(loaded, members=rows))
     by_category_phrase = {(row["primary_category_id"], row["canonical_direction_key"]): row for row in directions}
 
-    # The longest recurring alias wins because the aliases have exactly the same member identities.
-    assert ("c1", "aqua region tool") in by_category_phrase
-    assert ("c1", "region tool") not in by_category_phrase
-    assert ("c1", "aqua region") not in by_category_phrase
-    assert by_category_phrase[("c1", "aqua region tool")]["observed_member_identity_count"] == 4
+    # `death message` has two cohesive terms; `custom recipes` has one after excluding its generic modifier.
+    assert ("c1", "death message") in by_category_phrase
+    assert ("c1", "custom recipes") not in by_category_phrase
+    chosen = by_category_phrase[("c1", "death message")]
+    assert chosen["observed_member_identity_count"] == 3
+    assert chosen["exclusion_provenance"]["same_member_set_aliases_not_retained"] == ["custom recipes"]
+    assert ("c2", "death message") not in by_category_phrase
+    assert chosen["cohesive_content_tokens"] == ["death", "message"]
     assert exclusions["EXACT_MEMBER_SET_REDUNDANCY"] > 0
-
-    # Two identities across different categories do not pool into a supported phrase.
-    assert not any(row["canonical_direction_key"] == "pair only" for row in directions)
-    assert ("c2", "shared resource") in by_category_phrase
-    assert ("c1", "shared resource") not in by_category_phrase
-    assert all(row["primary_category_id"] == "c1" for row in memberships if row["canonical_identity"].startswith(("hangar:h", "voxel:v")) and row["direction_id"] == by_category_phrase[("c1", "aqua region tool")]["direction_id"])
+    assert all(row["primary_category_id"] == "c1" for row in memberships if row["direction_id"] == chosen["direction_id"])
 
 
 @pytest.mark.parametrize("phrase", [
@@ -236,7 +245,7 @@ def test_recurring_prose_and_marketing_templates_are_not_lexical_directions(load
 
 
 @pytest.mark.parametrize("phrase", [
-    "death message", "custom recipes", "item frames", "skip the night", "plugin death message",
+    "death message", "custom recipes", "item frames", "skip the night",
 ])
 def test_functional_phrase_fixtures_remain_eligible(loaded_fixture, phrase):
     _, loaded = loaded_fixture
@@ -251,7 +260,59 @@ def test_functional_phrase_fixtures_remain_eligible(loaded_fixture, phrase):
     retained = next(row for row in directions if row["canonical_direction_key"] == phrase)
     assert retained["semantic_guard_classification"] == "FUNCTIONAL_DIRECTION"
     assert retained["functional_content_tokens"]
+    assert retained["functional_cohesion_classification"] == "FUNCTIONAL_COHESION"
+    assert retained["functional_cohesion_version"]
+    assert _functional_cohesion_guard(phrase) == _qa_functional_cohesion_guard(phrase)
     assert _qa_functional_direction_guard(phrase) == "FUNCTIONAL_DIRECTION"
+
+
+@pytest.mark.parametrize(("phrase", "titles"), [
+    ("ax", ["AxVaults", "AxSmithing", "AxEnvoys"]),
+    ("core", ["CoreProtect", "EternalCore", "AirCore"]),
+    ("map", ["XaeroMapPlugin", "JourneyMap", "MapEasel"]),
+    ("way to manage", ["NobleWhitelist", "TheDashboard", "AdminGUI"]),
+    ("lock", ["BattleLock", "SoulLock", "Ultra Item Lock", "ChestLock"]),
+    ("spawn", ["AnarchySpawn", "Spawn-Elytra", "AnimatedIronGolemSpawn", "Saros-Spawn-Elytra", "MultipleBedSpawn"]),
+])
+def test_production_false_direction_member_sets_fail_closed(loaded_fixture, phrase, titles):
+    _, loaded = loaded_fixture
+    support = len(titles)
+    rows = []
+    for index, title in enumerate(titles):
+        summary = "No shared function."
+        if phrase == "way to manage":
+            summary = (
+                "A simple way to manage a whitelist.",
+                "The best way to manage a self hosted server.",
+                "An easy way to manage your Minecraft server.",
+            )[index]
+        rows.append(_member("hangar", f"production-{index}", "c1", "s1", title, summary=summary))
+    rows.extend(
+        _member("hangar", f"neutral-{index}", "c1", "s2", f"Neutral Product {index}")
+        for index in range(support)
+    )
+
+    directions, _, exclusions = _mine_lexical_directions(dict(loaded, members=rows))
+    assert not any(row["canonical_direction_key"] == phrase for row in directions)
+    assert exclusions["NON_COHESIVE_FUNCTIONAL_DIRECTION"] > 0
+    assert _functional_cohesion_guard(phrase)[0] == "NON_COHESIVE"
+    assert _qa_functional_cohesion_guard(phrase)[0] == "NON_COHESIVE"
+
+
+@pytest.mark.parametrize("phrase", ["auth", "home", "homes", "sleep", "teleport"])
+def test_versioned_single_function_controls_remain_eligible(loaded_fixture, phrase):
+    _, loaded = loaded_fixture
+    rows = [
+        _member("hangar", f"single-{index}", "c1", "s1" if index < 3 else "s2",
+                phrase if index < 3 else f"Neutral Product {index}")
+        for index in range(6)
+    ]
+    directions, _, _ = _mine_lexical_directions(dict(loaded, members=rows))
+    retained = next(row for row in directions if row["canonical_direction_key"] == phrase)
+    expected = ("FUNCTIONAL_COHESION", (phrase,))
+    assert _functional_cohesion_guard(phrase) == expected
+    assert _qa_functional_cohesion_guard(phrase) == expected
+    assert retained["cohesive_content_tokens"] == [phrase]
 
 
 def test_independent_qa_guard_does_not_call_generation_classifier(monkeypatch):
@@ -262,7 +323,14 @@ def test_independent_qa_guard_does_not_call_generation_classifier(monkeypatch):
         "_functional_direction_guard",
         lambda phrase: ("FUNCTIONAL_DIRECTION", ("plugin",)),
     )
+    monkeypatch.setattr(
+        category_directions,
+        "_functional_cohesion_guard",
+        lambda phrase: ("FUNCTIONAL_COHESION", ("ax",)),
+    )
     assert _qa_functional_direction_guard("simple plugin that") == "NON_DIRECTION_BOILERPLATE"
+    assert _qa_functional_cohesion_guard("ax") == ("NON_COHESIVE", ())
+    assert _qa_functional_cohesion_guard("way to manage") == ("NON_COHESIVE", ())
 
 
 def test_summary_match_evidence_has_exact_surface_span_and_nonnfkc_span_is_null(loaded_fixture):
@@ -276,23 +344,23 @@ def test_summary_match_evidence_has_exact_surface_span_and_nonnfkc_span_is_null(
     # unique-to-two-members phrase must carry the precise first sentence rather than sentence two.
     for member in altered["members"]:
         if member["source_resource_id"] in {"h4", "h5"}:
-            member["summary"] = "Quiet Realm Ledger. Pair Only should not enter the first-sentence phrase."
+            member["summary"] = "Death Message. Pair Only should not enter the first-sentence phrase."
             altered["members_by_identity"][(member["source"], member["source_resource_id"])] = member
     directions, memberships, _ = _mine_lexical_directions(altered)
-    match = next(row for row in memberships if row["normalized_match"] == "quiet realm ledger")
+    match = next(row for row in memberships if row["normalized_match"] == "death message")
     assert match["match_field"] == "summary_first_sentence"
-    assert match["source_text_span"] == "Quiet Realm Ledger"
+    assert match["source_text_span"] == "Death Message"
     assert match["source_text_span"] != "Pair Only"
 
     nfkc_rows = [
-        dict(row, title="Ｑｕｉｅｔ Ｒｅａｌｍ Ｌｅｄｇｅｒ") if row["source_resource_id"] in {"h4", "h5"} else dict(row)
+        dict(row, title="Ｄｅａｔｈ Ｍｅｓｓａｇｅ") if row["source_resource_id"] in {"h4", "h5"} else dict(row)
         for row in loaded["members"]
     ]
     nfkc = dict(loaded, members=nfkc_rows, members_by_identity={
         (row["source"], row["source_resource_id"]): row for row in nfkc_rows
     })
     _, nfkc_memberships, _ = _mine_lexical_directions(nfkc)
-    normalized = next(row for row in nfkc_memberships if row["normalized_match"] == "quiet realm ledger")
+    normalized = next(row for row in nfkc_memberships if row["normalized_match"] == "death message")
     assert normalized["source_text_span"] is None
     assert normalized["source_span_start"] is None
 
@@ -394,7 +462,12 @@ def test_full_fixture_build_reconciles_exports_and_does_not_change_read_only_inp
     assert qa["status"] == "PASS"
     assert qa["failed_checks"] == []
     assert qa["checks"]["candidate_lexical_directions_pass_independent_functional_guard"]
+    assert qa["checks"]["candidate_lexical_directions_pass_independent_functional_cohesion"]
+    assert qa["checks"]["advance_lexical_directions_pass_independent_functional_cohesion"]
     assert qa["checks"]["retained_lexical_directions_pass_independent_functional_guard"]
+    assert qa["checks"]["retained_lexical_directions_pass_independent_functional_cohesion"]
+    assert qa["checks"]["retained_lexical_directions_have_versioned_cohesion_provenance"]
+    assert qa["checks"]["generation_and_independent_qa_cohesion_contracts_match"]
     assert qa["row_counts"]["direction_universe"] >= 3
     summary_rows = [
         json.loads(line)

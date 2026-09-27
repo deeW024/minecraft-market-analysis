@@ -20,11 +20,12 @@ from .pipeline import quantile
 
 WORK_ORDER = "YEE-75"
 DELIVERY_STATUS = "CATEGORY_DIRECTION_DISCOVERY_READY_FOR_SUPERVISOR_REVIEW"
-SCHEMA_VERSION = "yee-75-category-direction-discovery-v0.2"
-DISCOVERY_RULE_VERSION = "yee-75-category-local-lexical-mining-v0.2"
+SCHEMA_VERSION = "yee-75-category-direction-discovery-v0.3"
+DISCOVERY_RULE_VERSION = "yee-75-category-local-lexical-mining-v0.3"
 NORMALIZATION_VERSION = "yee-75-text-normalization-v0.1"
 WHITESPACE_SEMANTICS_VERSION = "yee-75-observed-whitespace-semantics-v0.1"
 FUNCTIONAL_DIRECTION_GUARD_VERSION = "yee-75-functional-direction-guard-v0.1"
+FUNCTIONAL_COHESION_VERSION = "yee-75-functional-cohesion-contract-v0.1"
 INPUT_WORK_ORDER = "YEE-73"
 INPUT_SIGNAL_SCHEMA_VERSION = "yee-73-category-signal-layer-v0.1"
 INPUT_MERGE_COMMIT = "3f7dc4c55973dafb8fc56bfda25f7c3e595ef872"
@@ -97,6 +98,20 @@ _QA_NON_DIRECTION_PREFIX_TOKENS = frozenset(
     """.split()
 )
 _QA_NON_DIRECTION_SUFFIX_TOKENS = frozenset("to for with from and or of that which".split())
+STABLE_FUNCTION_SINGLE_TOKEN_ALLOWLIST = frozenset("auth home homes sleep teleport".split())
+COHERENT_FUNCTIONAL_PHRASE_TERMS = {
+    "custom recipes": ("recipes",),
+    "death message": ("death", "message"),
+    "item frames": ("item", "frames"),
+    "skip the night": ("skip", "night"),
+}
+_QA_STABLE_FUNCTION_SINGLE_TOKEN_ALLOWLIST = frozenset("auth home homes sleep teleport".split())
+_QA_COHERENT_FUNCTIONAL_PHRASE_TERMS = {
+    "custom recipes": ("recipes",),
+    "death message": ("death", "message"),
+    "item frames": ("item", "frames"),
+    "skip the night": ("skip", "night"),
+}
 VERSION_RE = re.compile(
     r"(?<![\w])\d+(?:\.\d+)+(?:\s*(?:-|–|—|to)\s*\d+(?:\.\d+)+)?(?:\.x|\+)?(?![\w])",
     re.IGNORECASE,
@@ -440,6 +455,32 @@ def _qa_functional_direction_guard(phrase: str) -> str:
     return "NON_DIRECTION_BOILERPLATE"
 
 
+def _functional_cohesion_guard(phrase: str) -> tuple[str, tuple[str, ...]]:
+    """Fail closed unless the exact term/phrase is in the versioned cohesion contract."""
+    tokens = tuple(phrase.split())
+    if len(tokens) == 1:
+        if tokens[0] in STABLE_FUNCTION_SINGLE_TOKEN_ALLOWLIST:
+            return "FUNCTIONAL_COHESION", tokens
+        return "NON_COHESIVE", ()
+    phrase_terms = COHERENT_FUNCTIONAL_PHRASE_TERMS.get(phrase)
+    if phrase_terms is not None:
+        return "FUNCTIONAL_COHESION", phrase_terms
+    return "NON_COHESIVE", ()
+
+
+def _qa_functional_cohesion_guard(phrase: str) -> tuple[str, tuple[str, ...]]:
+    """Independent QA contract check; do not call the generation cohesion gate."""
+    words = [word for word in re.split(r"\s+", phrase.strip()) if word]
+    if len(words) == 1:
+        if words[0] in _QA_STABLE_FUNCTION_SINGLE_TOKEN_ALLOWLIST:
+            return "FUNCTIONAL_COHESION", (words[0],)
+        return "NON_COHESIVE", ()
+    accepted_terms = _QA_COHERENT_FUNCTIONAL_PHRASE_TERMS.get(" ".join(words))
+    if accepted_terms is not None:
+        return "FUNCTIONAL_COHESION", accepted_terms
+    return "NON_COHESIVE", ()
+
+
 def _normalized_label_key(text: str) -> str:
     return " ".join(str(item["token"]) for item in _normalized_tokens(text))
 
@@ -500,7 +541,7 @@ def _mine_lexical_directions(
                     ):
                         entry["members"][identity] = match
 
-        eligible: list[tuple[str, dict[str, Any]]] = []
+        eligible: list[tuple[str, dict[str, Any], tuple[str, ...]]] = []
         for phrase_key, entry in sorted(phrases.items()):
             phrase_tokens = tuple(phrase_key.split())
             if phrase_key in taxonomy_label_keys:
@@ -510,6 +551,10 @@ def _mine_lexical_directions(
             if semantic_classification != "FUNCTIONAL_DIRECTION":
                 exclusions["NON_DIRECTION_BOILERPLATE"] += 1
                 continue
+            cohesion_classification, cohesion_content_tokens = _functional_cohesion_guard(phrase_key)
+            if cohesion_classification != "FUNCTIONAL_COHESION":
+                exclusions["NON_COHESIVE_FUNCTIONAL_DIRECTION"] += 1
+                continue
             required_support = 3 if len(phrase_tokens) == 1 else 2
             support = len(entry["members"])
             if support < required_support:
@@ -518,19 +563,26 @@ def _mine_lexical_directions(
             if support / len(category_members) > 0.5:
                 exclusions["TOO_BROAD_FOR_DIRECTION"] += 1
                 continue
-            eligible.append((phrase_key, entry))
+            eligible.append((phrase_key, entry, cohesion_content_tokens))
 
-        by_member_set: dict[frozenset[str], list[tuple[str, dict[str, Any]]]] = defaultdict(list)
-        for phrase_key, entry in eligible:
-            by_member_set[frozenset(entry["members"])].append((phrase_key, entry))
+        by_member_set: dict[frozenset[str], list[tuple[str, dict[str, Any], tuple[str, ...]]]] = defaultdict(list)
+        for phrase_key, entry, cohesion_content_tokens in eligible:
+            by_member_set[frozenset(entry["members"])].append((phrase_key, entry, cohesion_content_tokens))
         for member_set, aliases in sorted(by_member_set.items(), key=lambda item: tuple(sorted(item[0]))):
             ordered_aliases = sorted(
                 aliases,
-                key=lambda item: (-len(item[0].split()), -int(item[1]["title_occurrences"]), item[0]),
+                key=lambda item: (
+                    -len(item[2]),
+                    len(item[0].split()) - len(item[2]),
+                    -int(item[1]["title_occurrences"]),
+                    -len(item[0].split()),
+                    item[0],
+                ),
             )
-            canonical_key, chosen = ordered_aliases[0]
+            canonical_key, chosen, _ = ordered_aliases[0]
             semantic_classification, functional_content_tokens = _functional_direction_guard(canonical_key)
-            redundant = [phrase for phrase, _ in ordered_aliases[1:]]
+            cohesion_classification, cohesion_content_tokens = _functional_cohesion_guard(canonical_key)
+            redundant = [phrase for phrase, _, _ in ordered_aliases[1:]]
             exclusions["EXACT_MEMBER_SET_REDUNDANCY"] += len(redundant)
             # Membership matches are already keyed by the stable canonical identity.
             member_rows = {
@@ -563,7 +615,7 @@ def _mine_lexical_directions(
                 "definition_semantics": f"Exact recurring normalized phrase {canonical_key!r} in accepted YEE-73 title or first summary sentence; no semantic generalization.",
                 "exclusion_provenance": {
                     "same_member_set_aliases_not_retained": redundant,
-                    "canonical_choice_rule": "more_tokens_then_more_title_occurrences_then_lexical_order",
+                    "canonical_choice_rule": "more_functional_content_tokens_then_fewer_nonfunctional_tokens_then_more_title_occurrences_then_more_tokens_then_lexical_order",
                 },
                 "input_sqlite_sha256": loaded["input_sha256"],
                 "taxonomy_version": TAXONOMY_VERSION,
@@ -573,6 +625,9 @@ def _mine_lexical_directions(
                 "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
                 "semantic_guard_classification": semantic_classification,
                 "functional_content_tokens": list(functional_content_tokens),
+                "functional_cohesion_version": FUNCTIONAL_COHESION_VERSION,
+                "functional_cohesion_classification": cohesion_classification,
+                "cohesive_content_tokens": list(cohesion_content_tokens),
                 "normalization_version": NORMALIZATION_VERSION,
                 "member_identity_set": sorted(member_rows),
                 "title_occurrence_count": int(chosen["title_occurrences"]),
@@ -600,6 +655,7 @@ def _mine_lexical_directions(
                     "normalization_version": NORMALIZATION_VERSION,
                     "discovery_rule_version": DISCOVERY_RULE_VERSION,
                     "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
+                    "functional_cohesion_version": FUNCTIONAL_COHESION_VERSION,
                     "input_sqlite_sha256": loaded["input_sha256"],
                     "taxonomy_version": TAXONOMY_VERSION,
                 })
@@ -1467,6 +1523,7 @@ def _run_metadata(loaded: Mapping[str, Any], code_commit: str | None) -> dict[st
         "normalization_version": NORMALIZATION_VERSION,
         "whitespace_semantics_version": WHITESPACE_SEMANTICS_VERSION,
         "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
+        "functional_cohesion_version": FUNCTIONAL_COHESION_VERSION,
         "input_work_order": INPUT_WORK_ORDER,
         "input_merge_commit": INPUT_MERGE_COMMIT,
         "input_sqlite_sha256": loaded["input_sha256"],
@@ -1712,6 +1769,11 @@ def _qa_checks(
     lexical_candidate_ids = {
         str(row["direction_id"]) for row in candidates if row["direction_type"] == "LEXICAL_SUBNICHE"
     }
+    lexical_advance_ids = {
+        str(row["direction_id"]) for row in evaluations
+        if row["candidate_state"] == "ADVANCE_TO_STAGE_D"
+        and str(row["direction_id"]) in lexical_directions_by_id
+    }
     sample_ok = True
     for pack in packs:
         for source in SOURCES:
@@ -1768,8 +1830,25 @@ def _qa_checks(
             ) == "FUNCTIONAL_DIRECTION"
             for direction_id in lexical_candidate_ids
         ),
+        "candidate_lexical_directions_pass_independent_functional_cohesion": all(
+            _qa_functional_cohesion_guard(
+                str(lexical_directions_by_id[direction_id]["canonical_direction_key"])
+            )[0] == "FUNCTIONAL_COHESION"
+            for direction_id in lexical_candidate_ids
+        ),
+        "advance_lexical_directions_pass_independent_functional_cohesion": all(
+            _qa_functional_cohesion_guard(
+                str(lexical_directions_by_id[direction_id]["canonical_direction_key"])
+            )[0] == "FUNCTIONAL_COHESION"
+            for direction_id in lexical_advance_ids
+        ),
         "retained_lexical_directions_pass_independent_functional_guard": all(
             _qa_functional_direction_guard(str(row["canonical_direction_key"])) == "FUNCTIONAL_DIRECTION"
+            for row in lexical_directions
+        ),
+        "retained_lexical_directions_pass_independent_functional_cohesion": all(
+            _qa_functional_cohesion_guard(str(row["canonical_direction_key"]))
+            == ("FUNCTIONAL_COHESION", tuple(row.get("cohesive_content_tokens", ())))
             for row in lexical_directions
         ),
         "retained_lexical_directions_have_versioned_guard_provenance": all(
@@ -1778,10 +1857,20 @@ def _qa_checks(
             and bool(row.get("functional_content_tokens"))
             for row in lexical_directions
         ),
+        "retained_lexical_directions_have_versioned_cohesion_provenance": all(
+            row.get("functional_cohesion_version") == FUNCTIONAL_COHESION_VERSION
+            and row.get("functional_cohesion_classification") == "FUNCTIONAL_COHESION"
+            and bool(row.get("cohesive_content_tokens"))
+            for row in lexical_directions
+        ),
         "generation_and_independent_qa_guard_vocabularies_match": (
             NON_DIRECTION_BOILERPLATE_TOKENS == _QA_NON_DIRECTION_BOILERPLATE_TOKENS
             and NON_DIRECTION_PREFIX_TOKENS == _QA_NON_DIRECTION_PREFIX_TOKENS
             and NON_DIRECTION_SUFFIX_TOKENS == _QA_NON_DIRECTION_SUFFIX_TOKENS
+        ),
+        "generation_and_independent_qa_cohesion_contracts_match": (
+            STABLE_FUNCTION_SINGLE_TOKEN_ALLOWLIST == _QA_STABLE_FUNCTION_SINGLE_TOKEN_ALLOWLIST
+            and COHERENT_FUNCTIONAL_PHRASE_TERMS == _QA_COHERENT_FUNCTIONAL_PHRASE_TERMS
         ),
         "lexical_support_thresholds_enforced": all(
             len(lexical_members_by_direction[str(row["direction_id"])]) >= (3 if int(row["lexical_token_count"]) == 1 else 2)
@@ -1875,6 +1964,7 @@ def _run_qa(
         "direction_schema_version": SCHEMA_VERSION,
         "discovery_rule_version": DISCOVERY_RULE_VERSION,
         "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
+        "functional_cohesion_version": FUNCTIONAL_COHESION_VERSION,
         "normalization_version": NORMALIZATION_VERSION,
         "whitespace_semantics_version": WHITESPACE_SEMANTICS_VERSION,
         "run_id": None,
@@ -1948,7 +2038,9 @@ def _final_report(qa: Mapping[str, Any], tables: Mapping[str, Sequence[Mapping[s
         f"- Analysis as of: `{qa['analysis_as_of']}` (inherited unchanged)",
         f"- Taxonomy: `{TAXONOMY_VERSION}` / `{TAXONOMY_SHA256}`; {qa['taxonomy']['category_count']} categories and {qa['taxonomy']['subcategory_count']} subcategories",
         f"- Lexical guard: `{FUNCTIONAL_DIRECTION_GUARD_VERSION}`; discovery rules `{DISCOVERY_RULE_VERSION}`",
+        f"- Functional cohesion: `{FUNCTIONAL_COHESION_VERSION}`; exact reviewed phrase and stable single-function allowlists; no lexical/candidate minimum",
         f"- Recurring prose/marketing n-grams excluded by the functional-direction guard: {qa['phrase_exclusion_counts'].get('NON_DIRECTION_BOILERPLATE', 0)}",
+        f"- Non-cohesive/ambiguous lexical phrases excluded before facts/evaluation: {qa['phrase_exclusion_counts'].get('NON_COHESIVE_FUNCTIONAL_DIRECTION', 0)}",
         f"- Code commit: `{qa['code_commit']}`; run ID: `{qa['run_id']}`",
         "",
         "## Direction and candidate reconciliation",
@@ -1996,6 +2088,7 @@ def _manifest(output: Path, run_metadata: Mapping[str, Any], qa: Mapping[str, An
         "normalization_version": NORMALIZATION_VERSION,
         "whitespace_semantics_version": WHITESPACE_SEMANTICS_VERSION,
         "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
+        "functional_cohesion_version": FUNCTIONAL_COHESION_VERSION,
         "input": {
             "work_order": INPUT_WORK_ORDER,
             "accepted_merge_commit": INPUT_MERGE_COMMIT,
