@@ -1,6 +1,8 @@
 # YEE-75 Direction Discovery schema
 
-Schema version: `yee-75-category-direction-discovery-v0.1`.
+Schema version: `yee-75-category-direction-discovery-v0.2`.
+
+Lexical discovery rules: `yee-75-category-local-lexical-mining-v0.2`; functional-direction guard: `yee-75-functional-direction-guard-v0.1`.
 
 ## Canonical grain and provenance
 
@@ -22,7 +24,7 @@ Stable `direction_id` is `dir_` plus the first 24 lowercase hex characters of SH
 
 `category_direction_discovery.sqlite` additionally contains immutable `run_metadata`, `frozen_taxonomy_snapshot`, and `source_coverage_snapshot`. Every data table retains its scalar/nested columns and canonical `record_json`; run metadata is protected from UPDATE/DELETE by SQLite triggers.
 
-`direction_universe` records direction type/category, canonical key/label, baseline subcategory when applicable, lexical token count, rule/schema/input/taxonomy provenance, observed identity counts by source, observed subcategory distribution, unique dominant subcategory when one exists, evidence semantics, and exact-member-set alias exclusion provenance.
+`direction_universe` records direction type/category, canonical key/label, baseline subcategory when applicable, lexical token count, rule/schema/input/taxonomy provenance, observed identity counts by source, observed subcategory distribution, unique dominant subcategory when one exists, evidence semantics, and exact-member-set alias exclusion provenance. Lexical rows additionally carry the functional-direction guard version, `FUNCTIONAL_DIRECTION` classification, and the retained functional content tokens. Recurring prose/marketing templates are rejected before lexical support/broadness admission; an independent QA classifier checks retained lexical rows and candidate rows against the versioned guard, including rows not selected for downstream advancement.
 
 `direction_memberships` records direction, frozen category/subcategory, source identity, method, and (for lexical membership) exact normalized match, source field/span when recoverable, phrase key, and normalization/rule versions. JSONL uses JSON `null`; CSV uses `\\N`; all exports are UTF-8, LF, deterministic.
 

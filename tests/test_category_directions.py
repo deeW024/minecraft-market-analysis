@@ -22,6 +22,7 @@ from market_analysis.category_directions import (
     _mine_lexical_directions,
     _normalized_tokens,
     _observed_supply_band,
+    _qa_functional_direction_guard,
     _representative_members,
     _source_direction_fact,
     _whitespace_state,
@@ -213,6 +214,57 @@ def test_lexical_discovery_is_category_local_gated_and_collapses_exact_member_se
     assert all(row["primary_category_id"] == "c1" for row in memberships if row["canonical_identity"].startswith(("hangar:h", "voxel:v")) and row["direction_id"] == by_category_phrase[("c1", "aqua region tool")]["direction_id"])
 
 
+@pytest.mark.parametrize("phrase", [
+    "simple plugin that", "a fully", "a simple", "a simple minecraft", "a single",
+    "better", "custom", "designed to", "players with", "players from", "to players",
+    "way to", "want to", "that lets", "that lets you", "to create", "provides a simple",
+    "plugin designed to", "plugin that enables",
+])
+def test_recurring_prose_and_marketing_templates_are_not_lexical_directions(loaded_fixture, phrase):
+    _, loaded = loaded_fixture
+    rows = [
+        _member(
+            "hangar", f"template-{index}", "c1", "s1" if index < 3 else "s2",
+            phrase if index < 3 else f"Neutral product {index}",
+        )
+        for index in range(6)
+    ]
+    directions, _, exclusions = _mine_lexical_directions(dict(loaded, members=rows))
+    assert not any(row["canonical_direction_key"] == phrase for row in directions)
+    assert exclusions["NON_DIRECTION_BOILERPLATE"] > 0
+    assert _qa_functional_direction_guard(phrase) == "NON_DIRECTION_BOILERPLATE"
+
+
+@pytest.mark.parametrize("phrase", [
+    "death message", "custom recipes", "item frames", "skip the night", "plugin death message",
+])
+def test_functional_phrase_fixtures_remain_eligible(loaded_fixture, phrase):
+    _, loaded = loaded_fixture
+    rows = [
+        _member(
+            "hangar", f"functional-{index}", "c1", "s1" if index < 3 else "s2",
+            phrase if index < 3 else f"Neutral product {index}",
+        )
+        for index in range(6)
+    ]
+    directions, _, _ = _mine_lexical_directions(dict(loaded, members=rows))
+    retained = next(row for row in directions if row["canonical_direction_key"] == phrase)
+    assert retained["semantic_guard_classification"] == "FUNCTIONAL_DIRECTION"
+    assert retained["functional_content_tokens"]
+    assert _qa_functional_direction_guard(phrase) == "FUNCTIONAL_DIRECTION"
+
+
+def test_independent_qa_guard_does_not_call_generation_classifier(monkeypatch):
+    from market_analysis import category_directions
+
+    monkeypatch.setattr(
+        category_directions,
+        "_functional_direction_guard",
+        lambda phrase: ("FUNCTIONAL_DIRECTION", ("plugin",)),
+    )
+    assert _qa_functional_direction_guard("simple plugin that") == "NON_DIRECTION_BOILERPLATE"
+
+
 def test_summary_match_evidence_has_exact_surface_span_and_nonnfkc_span_is_null(loaded_fixture):
     _, loaded = loaded_fixture
     altered = dict(loaded)
@@ -341,6 +393,8 @@ def test_full_fixture_build_reconciles_exports_and_does_not_change_read_only_inp
 
     assert qa["status"] == "PASS"
     assert qa["failed_checks"] == []
+    assert qa["checks"]["candidate_lexical_directions_pass_independent_functional_guard"]
+    assert qa["checks"]["retained_lexical_directions_pass_independent_functional_guard"]
     assert qa["row_counts"]["direction_universe"] >= 3
     summary_rows = [
         json.loads(line)

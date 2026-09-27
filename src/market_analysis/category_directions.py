@@ -20,10 +20,11 @@ from .pipeline import quantile
 
 WORK_ORDER = "YEE-75"
 DELIVERY_STATUS = "CATEGORY_DIRECTION_DISCOVERY_READY_FOR_SUPERVISOR_REVIEW"
-SCHEMA_VERSION = "yee-75-category-direction-discovery-v0.1"
-DISCOVERY_RULE_VERSION = "yee-75-category-local-lexical-mining-v0.1"
+SCHEMA_VERSION = "yee-75-category-direction-discovery-v0.2"
+DISCOVERY_RULE_VERSION = "yee-75-category-local-lexical-mining-v0.2"
 NORMALIZATION_VERSION = "yee-75-text-normalization-v0.1"
 WHITESPACE_SEMANTICS_VERSION = "yee-75-observed-whitespace-semantics-v0.1"
+FUNCTIONAL_DIRECTION_GUARD_VERSION = "yee-75-functional-direction-guard-v0.1"
 INPUT_WORK_ORDER = "YEE-73"
 INPUT_SIGNAL_SCHEMA_VERSION = "yee-73-category-signal-layer-v0.1"
 INPUT_MERGE_COMMIT = "3f7dc4c55973dafb8fc56bfda25f7c3e595ef872"
@@ -67,6 +68,35 @@ STOP_WORDS = frozenset(
     add-on support supports download downloads updated update updates
     """.split()
 )
+NON_DIRECTION_BOILERPLATE_TOKENS = frozenset(
+    """
+    simple simpler simplest fully single better best improved improve easy easily easier easiest
+    lightweight powerful advanced customizable custom designed design players player want wants
+    wanted way lets let create creates created creating provide provides provided providing enable
+    enables enabled enabling skip
+    """.split()
+)
+NON_DIRECTION_PREFIX_TOKENS = frozenset(
+    """
+    a an the and but or to for with from in on at by of
+    """.split()
+)
+NON_DIRECTION_SUFFIX_TOKENS = frozenset("to for with from and or of that which".split())
+# Deliberately duplicated from the generation contract so QA independently recomputes it.
+_QA_NON_DIRECTION_BOILERPLATE_TOKENS = frozenset(
+    """
+    simple simpler simplest fully single better best improved improve easy easily easier easiest
+    lightweight powerful advanced customizable custom designed design players player want wants
+    wanted way lets let create creates created creating provide provides provided providing enable
+    enables enabled enabling skip
+    """.split()
+)
+_QA_NON_DIRECTION_PREFIX_TOKENS = frozenset(
+    """
+    a an the and but or to for with from in on at by of
+    """.split()
+)
+_QA_NON_DIRECTION_SUFFIX_TOKENS = frozenset("to for with from and or of that which".split())
 VERSION_RE = re.compile(
     r"(?<![\w])\d+(?:\.\d+)+(?:\s*(?:-|–|—|to)\s*\d+(?:\.\d+)+)?(?:\.x|\+)?(?![\w])",
     re.IGNORECASE,
@@ -378,6 +408,38 @@ def _direction_id(category_id: str, direction_type: str, canonical_key: str) -> 
     return f"dir_{hashlib.sha256(seed).hexdigest()[:24]}"
 
 
+def _functional_direction_guard(phrase: str) -> tuple[str, tuple[str, ...]]:
+    """Require lexical content beyond versioned prose/marketing scaffolding."""
+    tokens = tuple(phrase.split())
+    functional_tokens = tuple(
+        token for token in tokens
+        if token not in STOP_WORDS and token not in NON_DIRECTION_BOILERPLATE_TOKENS and not token.isdigit()
+    )
+    if (
+        not functional_tokens
+        or (tokens and tokens[0] in NON_DIRECTION_PREFIX_TOKENS)
+        or (tokens and tokens[-1] in NON_DIRECTION_SUFFIX_TOKENS)
+    ):
+        return "NON_DIRECTION_BOILERPLATE", functional_tokens
+    return "FUNCTIONAL_DIRECTION", functional_tokens
+
+
+def _qa_functional_direction_guard(phrase: str) -> str:
+    """Independent QA implementation; do not call the generation guard."""
+    tokens = [token for token in re.split(r"\s+", phrase.strip()) if token]
+    content_tokens = [
+        token for token in tokens
+        if token not in STOP_WORDS
+        and token not in _QA_NON_DIRECTION_BOILERPLATE_TOKENS
+        and not token.isdecimal()
+    ]
+    boilerplate_prefix = bool(tokens and tokens[0] in _QA_NON_DIRECTION_PREFIX_TOKENS)
+    dangling_suffix = bool(tokens and tokens[-1] in _QA_NON_DIRECTION_SUFFIX_TOKENS)
+    if content_tokens and not boilerplate_prefix and not dangling_suffix:
+        return "FUNCTIONAL_DIRECTION"
+    return "NON_DIRECTION_BOILERPLATE"
+
+
 def _normalized_label_key(text: str) -> str:
     return " ".join(str(item["token"]) for item in _normalized_tokens(text))
 
@@ -444,6 +506,10 @@ def _mine_lexical_directions(
             if phrase_key in taxonomy_label_keys:
                 exclusions["TAXONOMY_LABEL_DUPLICATE"] += 1
                 continue
+            semantic_classification, functional_content_tokens = _functional_direction_guard(phrase_key)
+            if semantic_classification != "FUNCTIONAL_DIRECTION":
+                exclusions["NON_DIRECTION_BOILERPLATE"] += 1
+                continue
             required_support = 3 if len(phrase_tokens) == 1 else 2
             support = len(entry["members"])
             if support < required_support:
@@ -463,6 +529,7 @@ def _mine_lexical_directions(
                 key=lambda item: (-len(item[0].split()), -int(item[1]["title_occurrences"]), item[0]),
             )
             canonical_key, chosen = ordered_aliases[0]
+            semantic_classification, functional_content_tokens = _functional_direction_guard(canonical_key)
             redundant = [phrase for phrase, _ in ordered_aliases[1:]]
             exclusions["EXACT_MEMBER_SET_REDUNDANCY"] += len(redundant)
             # Membership matches are already keyed by the stable canonical identity.
@@ -503,6 +570,9 @@ def _mine_lexical_directions(
                 "taxonomy_sha256": TAXONOMY_SHA256,
                 "signal_schema_version": INPUT_SIGNAL_SCHEMA_VERSION,
                 "direction_schema_version": SCHEMA_VERSION,
+                "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
+                "semantic_guard_classification": semantic_classification,
+                "functional_content_tokens": list(functional_content_tokens),
                 "normalization_version": NORMALIZATION_VERSION,
                 "member_identity_set": sorted(member_rows),
                 "title_occurrence_count": int(chosen["title_occurrences"]),
@@ -529,6 +599,7 @@ def _mine_lexical_directions(
                     "phrase_key": canonical_key,
                     "normalization_version": NORMALIZATION_VERSION,
                     "discovery_rule_version": DISCOVERY_RULE_VERSION,
+                    "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
                     "input_sqlite_sha256": loaded["input_sha256"],
                     "taxonomy_version": TAXONOMY_VERSION,
                 })
@@ -1395,6 +1466,7 @@ def _run_metadata(loaded: Mapping[str, Any], code_commit: str | None) -> dict[st
         "discovery_rule_version": DISCOVERY_RULE_VERSION,
         "normalization_version": NORMALIZATION_VERSION,
         "whitespace_semantics_version": WHITESPACE_SEMANTICS_VERSION,
+        "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
         "input_work_order": INPUT_WORK_ORDER,
         "input_merge_commit": INPUT_MERGE_COMMIT,
         "input_sqlite_sha256": loaded["input_sha256"],
@@ -1636,6 +1708,10 @@ def _qa_checks(
     all_output_rows = [row for table in TABLES for row in tables[table]]
     no_forbidden_fields = not _forbidden_output_key(all_output_rows)
     candidate_state_counts = Counter(str(row["candidate_state"]) for row in evaluations)
+    lexical_directions_by_id = {str(row["direction_id"]): row for row in lexical_directions}
+    lexical_candidate_ids = {
+        str(row["direction_id"]) for row in candidates if row["direction_type"] == "LEXICAL_SUBNICHE"
+    }
     sample_ok = True
     for pack in packs:
         for source in SOURCES:
@@ -1685,6 +1761,27 @@ def _qa_checks(
         "lexical_direction_memberships_stay_category_local": all(
             row["primary_category_id"] == directions_by_id[str(row["direction_id"])]["primary_category_id"]
             for row in memberships if row["direction_type"] == "LEXICAL_SUBNICHE"
+        ),
+        "candidate_lexical_directions_pass_independent_functional_guard": all(
+            _qa_functional_direction_guard(
+                str(lexical_directions_by_id[direction_id]["canonical_direction_key"])
+            ) == "FUNCTIONAL_DIRECTION"
+            for direction_id in lexical_candidate_ids
+        ),
+        "retained_lexical_directions_pass_independent_functional_guard": all(
+            _qa_functional_direction_guard(str(row["canonical_direction_key"])) == "FUNCTIONAL_DIRECTION"
+            for row in lexical_directions
+        ),
+        "retained_lexical_directions_have_versioned_guard_provenance": all(
+            row.get("functional_direction_guard_version") == FUNCTIONAL_DIRECTION_GUARD_VERSION
+            and row.get("semantic_guard_classification") == "FUNCTIONAL_DIRECTION"
+            and bool(row.get("functional_content_tokens"))
+            for row in lexical_directions
+        ),
+        "generation_and_independent_qa_guard_vocabularies_match": (
+            NON_DIRECTION_BOILERPLATE_TOKENS == _QA_NON_DIRECTION_BOILERPLATE_TOKENS
+            and NON_DIRECTION_PREFIX_TOKENS == _QA_NON_DIRECTION_PREFIX_TOKENS
+            and NON_DIRECTION_SUFFIX_TOKENS == _QA_NON_DIRECTION_SUFFIX_TOKENS
         ),
         "lexical_support_thresholds_enforced": all(
             len(lexical_members_by_direction[str(row["direction_id"])]) >= (3 if int(row["lexical_token_count"]) == 1 else 2)
@@ -1777,6 +1874,7 @@ def _run_qa(
         "status": "PASS",
         "direction_schema_version": SCHEMA_VERSION,
         "discovery_rule_version": DISCOVERY_RULE_VERSION,
+        "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
         "normalization_version": NORMALIZATION_VERSION,
         "whitespace_semantics_version": WHITESPACE_SEMANTICS_VERSION,
         "run_id": None,
@@ -1849,6 +1947,8 @@ def _final_report(qa: Mapping[str, Any], tables: Mapping[str, Sequence[Mapping[s
         f"- Input identities: {qa['input']['signal_member_count']} (Hangar {qa['input']['member_count_by_source']['hangar']}; Voxel {qa['input']['member_count_by_source']['voxel']})",
         f"- Analysis as of: `{qa['analysis_as_of']}` (inherited unchanged)",
         f"- Taxonomy: `{TAXONOMY_VERSION}` / `{TAXONOMY_SHA256}`; {qa['taxonomy']['category_count']} categories and {qa['taxonomy']['subcategory_count']} subcategories",
+        f"- Lexical guard: `{FUNCTIONAL_DIRECTION_GUARD_VERSION}`; discovery rules `{DISCOVERY_RULE_VERSION}`",
+        f"- Recurring prose/marketing n-grams excluded by the functional-direction guard: {qa['phrase_exclusion_counts'].get('NON_DIRECTION_BOILERPLATE', 0)}",
         f"- Code commit: `{qa['code_commit']}`; run ID: `{qa['run_id']}`",
         "",
         "## Direction and candidate reconciliation",
@@ -1895,6 +1995,7 @@ def _manifest(output: Path, run_metadata: Mapping[str, Any], qa: Mapping[str, An
         "discovery_rule_version": DISCOVERY_RULE_VERSION,
         "normalization_version": NORMALIZATION_VERSION,
         "whitespace_semantics_version": WHITESPACE_SEMANTICS_VERSION,
+        "functional_direction_guard_version": FUNCTIONAL_DIRECTION_GUARD_VERSION,
         "input": {
             "work_order": INPUT_WORK_ORDER,
             "accepted_merge_commit": INPUT_MERGE_COMMIT,
