@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import socket
+import sqlite3
 import urllib.request
 from dataclasses import replace
 
@@ -386,6 +387,28 @@ def test_wrong_input_file_hash_fails_before_database_read(tmp_path):
     source.write_bytes(b"not the accepted database")
     with pytest.raises(gate.DecisionGateError, match="SHA-256"):
         gate._read_snapshot(source)
+
+
+def test_accepted_option_snapshot_reader_uses_actual_yee77_columns():
+    connection = sqlite3.connect(":memory:")
+    connection.execute(
+        "CREATE TABLE frozen_option_snapshot "
+        "(direction_id TEXT, category_id TEXT, record_json TEXT)"
+    )
+    connection.executemany(
+        "INSERT INTO frozen_option_snapshot VALUES (?,?,?)",
+        [
+            ("dir-b", "gameplay", json.dumps({"direction_id": "dir-b"})),
+            ("dir-a", "communication", json.dumps({"direction_id": "dir-a"})),
+        ],
+    )
+    try:
+        assert gate._read_option_rows(connection) == [
+            {"direction_id": "dir-a"},
+            {"direction_id": "dir-b"},
+        ]
+    finally:
+        connection.close()
 
 
 def test_zero_option_categories_stay_visible_with_explicit_null_state():

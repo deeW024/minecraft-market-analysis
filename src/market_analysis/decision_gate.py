@@ -272,6 +272,10 @@ def _json_rows(connection: sqlite3.Connection, table: str, order_by: str) -> lis
     ]
 
 
+def _read_option_rows(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    return _json_rows(connection, "frozen_option_snapshot", "category_id,direction_id")
+
+
 def _read_snapshot(path: Path) -> InputSnapshot:
     before = sha256_file(path)
     if before != ACCEPTED_YEE77_SHA256:
@@ -291,7 +295,7 @@ def _read_snapshot(path: Path) -> InputSnapshot:
             for table in ACCEPTED_INPUT_COUNTS
         }
         categories = _json_rows(connection, "frozen_category_snapshot", "category_order")
-        options = _json_rows(connection, "frozen_option_snapshot", "category_order,direction_id")
+        options = _read_option_rows(connection)
         packs = _json_rows(connection, "direction_research_packs", "category_id,direction_id")
         category_coverage = _json_rows(connection, "category_research_coverage", "category_id")
         sources = _json_rows(connection, "source_documents", "source_id")
