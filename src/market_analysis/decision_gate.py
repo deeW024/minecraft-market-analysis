@@ -66,15 +66,15 @@ EXPECTED_CATEGORY_OPTION_COUNTS = {
     "server_utilities": 0,
     "uncategorized": 0,
 }
-AMBIGUOUS_DIRECTION_KEYS = {
-    "progression",
-    "item_frames",
-    "entities_and_combat",
-    "abuse_and_spam_controls",
+AMBIGUOUS_DIRECTION_IDS = {
+    "dir_0ad55a06d421187e8a8f44dd",
+    "dir_6416ab7146c319984671650c",
+    "dir_8c9b343c9d5bcbf146ca6e67",
+    "dir_31aa5e6de836e19810ab626c",
 }
-EXPECTED_OVERLAP_KEY_PAIRS = {
-    frozenset(("home", "homes")),
-    frozenset(("skip_the_night", "sleep")),
+EXPECTED_OVERLAP_DIRECTION_ID_PAIRS = {
+    frozenset(("dir_b0df585042a3d44c0bc1bdf0", "dir_c8153fe3dcf8970596e83e04")),
+    frozenset(("dir_671b1de8435d83ce44203a66", "dir_a75cae79739ce1d81d996871")),
 }
 READINESS_VALUES = (
     "READY_FOR_SUPERVISOR_DECISION",
@@ -342,14 +342,10 @@ def _direction_id_sha256(options: list[dict[str, Any]]) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _expected_relation_key_pairs(
-    options: list[dict[str, Any]], relations: list[dict[str, Any]]
-) -> set[frozenset[str]]:
-    by_id = {row["direction_id"]: row["canonical_direction_key"] for row in options}
+def _expected_relation_id_pairs(relations: list[dict[str, Any]]) -> set[frozenset[str]]:
     return {
-        frozenset((by_id[row["direction_id"]], by_id[row["related_direction_id"]]))
+        frozenset((row["direction_id"], row["related_direction_id"]))
         for row in relations
-        if row["direction_id"] in by_id and row["related_direction_id"] in by_id
     }
 
 
@@ -364,8 +360,8 @@ def _input_gate_checks(snapshot: InputSnapshot) -> dict[str, bool]:
     packs_by_id = {row["direction_id"]: row for row in snapshot.packs}
     status_counts = Counter(row.get("research_status") for row in snapshot.packs)
     coverage_counts = Counter(row.get("research_coverage_status") for row in snapshot.packs)
-    ambiguous_keys = {
-        row["canonical_direction_key"]
+    ambiguous_ids = {
+        row["direction_id"]
         for row in snapshot.packs
         if row.get("research_status") == "AMBIGUOUS"
     }
@@ -415,19 +411,18 @@ def _input_gate_checks(snapshot: InputSnapshot) -> dict[str, bool]:
         "exact_readiness_source_status_reconciliation": (
             status_counts == {"RESOLVED": 12, "AMBIGUOUS": 4}
             and coverage_counts == {"SUFFICIENT": 12, "AMBIGUOUS": 4}
-            and ambiguous_keys == AMBIGUOUS_DIRECTION_KEYS
+            and ambiguous_ids == AMBIGUOUS_DIRECTION_IDS
             and all(
                 packs_by_id[key]["research_status"] == "AMBIGUOUS"
                 and packs_by_id[key]["research_coverage_status"] == "AMBIGUOUS"
-                for key in packs_by_id
-                if packs_by_id[key]["canonical_direction_key"] in AMBIGUOUS_DIRECTION_KEYS
+                for key in AMBIGUOUS_DIRECTION_IDS
             )
         ),
         "exact_accepted_overlap_relations": (
             len(snapshot.relations) == 2
             and len(set(relation_ids)) == 2
             and all(row.get("relation_type") == "SUBSTANTIAL_OVERLAP" for row in snapshot.relations)
-            and _expected_relation_key_pairs(snapshot.options, snapshot.relations) == EXPECTED_OVERLAP_KEY_PAIRS
+            and _expected_relation_id_pairs(snapshot.relations) == EXPECTED_OVERLAP_DIRECTION_ID_PAIRS
         ),
         "category_research_coverage_reconciles": (
             len(snapshot.category_coverage) == 11
@@ -609,8 +604,8 @@ def _build_overlap_groups(snapshot: InputSnapshot) -> list[dict[str, Any]]:
             ),
         })
     if {
-        frozenset(group["member_direction_keys"]) for group in groups
-    } != EXPECTED_OVERLAP_KEY_PAIRS:
+        frozenset(group["member_direction_ids"]) for group in groups
+    } != EXPECTED_OVERLAP_DIRECTION_ID_PAIRS:
         raise DecisionGateError("Accepted YEE-77 overlap identities do not match the pinned relations")
     return groups
 
@@ -1588,13 +1583,13 @@ def _qa(
     expected_status_counts = Counter(card["decision_readiness"] for card in cards)
     expected_research_counts = Counter(card["research_status"] for card in cards)
     expected_ambiguous = {
-        card["canonical_direction_key"]
+        card["direction_id"]
         for card in cards
         if card["decision_readiness"] == "REQUIRES_SCOPE_REFINEMENT"
     }
-    expected_overlap_pairs = _expected_relation_key_pairs(snapshot.options, snapshot.relations)
+    expected_overlap_pairs = _expected_relation_id_pairs(snapshot.relations)
     expected_group_pairs = {
-        frozenset(group["member_direction_keys"])
+        frozenset(group["member_direction_ids"])
         for group in groups
     }
     checks: dict[str, bool] = {
@@ -1678,7 +1673,7 @@ def _qa(
             }
             and expected_research_counts == {"RESOLVED": 12, "AMBIGUOUS": 4}
         ),
-        "exact_ambiguous_scope_refinement_directions": expected_ambiguous == AMBIGUOUS_DIRECTION_KEYS,
+        "exact_ambiguous_scope_refinement_directions": expected_ambiguous == AMBIGUOUS_DIRECTION_IDS,
         "no_ambiguous_direction_promoted_to_ready": all(
             card["decision_readiness"] != "READY_FOR_SUPERVISOR_DECISION"
             for card in cards
@@ -1687,7 +1682,7 @@ def _qa(
         "both_accepted_overlap_relations_once": (
             len(groups) == 2
             and len({row["relation_id"] for row in groups}) == 2
-            and expected_group_pairs == expected_overlap_pairs == EXPECTED_OVERLAP_KEY_PAIRS
+            and expected_group_pairs == expected_overlap_pairs == EXPECTED_OVERLAP_DIRECTION_ID_PAIRS
         ),
         "overlap_members_not_merged_or_dropped": (
             len(cards) == len(option_by_id)

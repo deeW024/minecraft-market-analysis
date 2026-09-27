@@ -23,8 +23,8 @@ DIRECTIONS = [
     ("gameplay", "dir_0ad55a06d421187e8a8f44dd", "progression", "PROMISING", "AMBIGUOUS", "AMBIGUOUS"),
     ("gameplay", "dir_3165035eb0f2780a59880e64", "teleport", "PROMISING", "RESOLVED", "SUFFICIENT"),
     ("gameplay", "dir_617529293c4b381179ea326e", "custom recipes", "PROMISING", "RESOLVED", "SUFFICIENT"),
-    ("gameplay", "dir_6416ab7146c319984671650c", "item_frames", "PROMISING", "AMBIGUOUS", "AMBIGUOUS"),
-    ("gameplay", "dir_671b1de8435d83ce44203a66", "skip_the_night", "PROMISING", "RESOLVED", "SUFFICIENT"),
+    ("gameplay", "dir_6416ab7146c319984671650c", "item frames", "PROMISING", "AMBIGUOUS", "AMBIGUOUS"),
+    ("gameplay", "dir_671b1de8435d83ce44203a66", "skip the night", "PROMISING", "RESOLVED", "SUFFICIENT"),
     ("gameplay", "dir_8c9b343c9d5bcbf146ca6e67", "entities_and_combat", "PROMISING", "AMBIGUOUS", "AMBIGUOUS"),
     ("gameplay", "dir_a75cae79739ce1d81d996871", "sleep", "PROMISING", "RESOLVED", "SUFFICIENT"),
     ("gameplay", "dir_b0df585042a3d44c0bc1bdf0", "home", "PROMISING", "RESOLVED", "SUFFICIENT"),
@@ -428,7 +428,10 @@ def test_both_overlap_relations_are_preserved_without_merging():
     snapshot = make_snapshot()
     groups = gate._build_overlap_groups(snapshot)
     assert len(groups) == 2
-    assert {frozenset(row["member_direction_keys"]) for row in groups} == gate.EXPECTED_OVERLAP_KEY_PAIRS
+    assert {
+        frozenset(row["member_direction_ids"])
+        for row in groups
+    } == gate.EXPECTED_OVERLAP_DIRECTION_ID_PAIRS
     assert all(row["relation_type"] == "SUBSTANTIAL_OVERLAP" for row in groups)
     rows = gate._build_decision_rows(snapshot)
     assert len(rows["cards"]) == 16
