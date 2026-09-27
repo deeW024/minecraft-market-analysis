@@ -613,6 +613,7 @@ def _normalise_capture(snapshot_options: list[dict], capture: dict) -> dict:
         "direction_semantic_relations": relation_rows,
         "direction_research_packs": packs,
         "normalization_summary": {
+            "capture_retrieved_at": capture["retrieved_at"],
             "capture_source_document_count": len(raw_sources),
             "canonical_source_document_count": len(sources),
             "deduplicated_source_document_count": len(raw_sources) - len(sources),
@@ -815,16 +816,19 @@ def _qa(
         "captured_individual_query_timestamp",
         "frozen_capture_retrieved_at; individual query timestamp was not preserved",
     }
+    summary = data.get("normalization_summary", {})
     query_timestamps_ok = True
     for query in queries:
         try:
-            datetime.fromisoformat(str(query["issued_at"]).replace("Z", "+00:00"))
-            timestamp_valid = True
+            parsed_issued_at = datetime.fromisoformat(str(query["issued_at"]).replace("Z", "+00:00"))
+            timestamp_valid = parsed_issued_at.tzinfo is not None and parsed_issued_at.utcoffset() is not None
         except (TypeError, ValueError):
             timestamp_valid = False
-        query_timestamps_ok &= timestamp_valid and query.get("issued_at_basis") in valid_timestamp_basis
+        basis = query.get("issued_at_basis")
+        if basis == "frozen_capture_retrieved_at; individual query timestamp was not preserved":
+            timestamp_valid = timestamp_valid and query.get("issued_at") == summary.get("capture_retrieved_at")
+        query_timestamps_ok &= timestamp_valid and basis in valid_timestamp_basis
     checks["query_issued_timestamps_have_explicit_or_disclosed_fallback_basis"] = bool(query_timestamps_ok)
-    summary = data.get("normalization_summary", {})
     checks["capture_normalization_summary_reconciles"] = (
         summary.get("capture_source_document_count")
         == summary.get("canonical_source_document_count", -1) + summary.get("deduplicated_source_document_count", -1)
