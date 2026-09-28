@@ -22,6 +22,7 @@ yee75-category-directions = "market_analysis.category_directions_cli:main"
 yee76-category-opportunity-map = "market_analysis.category_opportunity_map_cli:main"
 yee77-category-targeted-research = "market_analysis.category_targeted_research_cli:main"
 yee79-category-decision-gate = "market_analysis.category_decision_gate_cli:main"
+yee81-deep-commercial-validation = "market_analysis.deep_commercial_validation_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
