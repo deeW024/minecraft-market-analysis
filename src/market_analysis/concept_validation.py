@@ -14,6 +14,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 WORK_ORDER = "YEE-83"
 CAPTURE_VERSION = "yee-83-product-opportunity-concept-validation-v0.1"
+C1_RELAY_CONCEPT_ID = "yee83-cpc-01-network-chat-continuity"
 BASELINE_COMMIT = "e8f4bc140a9bad8af10b2cbf3a55a0f408ca343d"
 ACCEPTED_YEE81_EXECUTION_COMMIT = "4692b0cc58fd5966158e7cead3b921b1b0b0ee1d"
 COHORT_SHA256 = "cacc587b79e4d5ba818c258c757888aa33e258d3b78426449562265b1dec0fdb"
@@ -190,6 +191,22 @@ def validate_concept_seeds(concept: dict[str, Any], upstream: dict[str, Any]) ->
         raise ConceptValidationError("Concept market-job/direction mismatch")
 
 
+def _validate_c1_relay_query(query: dict[str, Any]) -> None:
+    if query.get("concept_id") != C1_RELAY_CONCEPT_ID or query.get("purpose") != "DIFFERENTIATION_GAP":
+        return
+    text = query.get("query_text", "").casefold()
+    required_groups = (
+        ("relay", "global chat", "message delivery"),
+        ("reliability", "continuity", "coverage", "unmet"),
+        ("backend", "backends"),
+        ("split", "separation", "separate"),
+        ("proxy", "velocity", "network"),
+    )
+    sibling_identity_terms = ("luckperms", "prefix", "suffix", "identity parity", "permission")
+    if any(not any(term in text for term in group) for group in required_groups) or any(term in text for term in sibling_identity_terms):
+        raise ConceptValidationError("C1 differentiation query must target relay continuity/reliability/coverage after proxy backend separation")
+
+
 def validate_query_coverage(concepts: list[dict[str, Any]], queries: list[dict[str, Any]]) -> None:
     concept_ids = {c["concept_id"] for c in concepts}
     concept_map = {c["concept_id"]: c for c in concepts}
@@ -213,6 +230,7 @@ def validate_query_coverage(concepts: list[dict[str, Any]], queries: list[dict[s
         text = query.get("query_text", "").casefold()
         if not terms or not any(term in text for term in terms):
             raise ConceptValidationError("Generic direction-level query cannot satisfy concept query contract")
+        _validate_c1_relay_query(query)
         if not query.get("result_note") or not isinstance(query.get("opened_source_ids"), list):
             raise ConceptValidationError("Each mandatory query needs a result note and explicit opened-source list")
     for query in queries:
@@ -286,20 +304,52 @@ def effective_differentiation_state(row: dict[str, Any], evidence: list[dict[str
     return row.get("evidence_state", "INSUFFICIENT")
 
 
-def derive_concept_state(dimensions: list[dict[str, Any]], research_coverage_status: str = "SUFFICIENT") -> str:
+def derive_concept_state(
+    dimensions: list[dict[str, Any]],
+    research_coverage_status: str = "SUFFICIENT",
+    material_counterevidence: bool = False,
+) -> str:
     by_name = {d["dimension"]: d["state"] for d in dimensions}
     if len(by_name) != 7 or set(by_name) != set(DIMENSIONS) or any(v not in DIMENSION_STATES for v in by_name.values()):
         raise ConceptValidationError("Exactly seven allowed concept dimensions are required")
     core = [by_name[name] for name in ("BUYER_PROBLEM_ALIGNMENT", "PURCHASE_TRIGGER_ALIGNMENT", "DIFFERENTIATION")]
-    if all(v == "SUPPORTED" for v in core):
-        return "CONCEPT_EVIDENCE_SUPPORTED"
     if any(v == "INSUFFICIENT_EVIDENCE" for v in core):
         return "CONCEPT_INSUFFICIENT_EVIDENCE"
-    if any(v == "MIXED" for v in core):
-        return "CONCEPT_EVIDENCE_MIXED"
     if any(v == "WEAK" for v in core) and research_coverage_status == "SUFFICIENT":
         return "CONCEPT_EVIDENCE_WEAK"
+    if any(v == "MIXED" for v in core) or material_counterevidence:
+        return "CONCEPT_EVIDENCE_MIXED"
+    if all(v == "SUPPORTED" for v in core):
+        return "CONCEPT_EVIDENCE_SUPPORTED"
     return "CONCEPT_INSUFFICIENT_EVIDENCE"
+
+
+def _qa_hard_rule_states(cards: list[dict[str, Any]], validations: list[dict[str, Any]]) -> bool:
+    validation_by_id = {row["concept_id"]: row for row in validations}
+    if len(validation_by_id) != len(validations) or len(cards) != len(validations):
+        return False
+    for card in cards:
+        validation = validation_by_id.get(card["concept_id"])
+        if not validation or card.get("dimension_assessments") != validation.get("dimension_assessments"):
+            return False
+        if card.get("research_coverage_status") != validation.get("research_coverage_status"):
+            return False
+        states = {row.get("dimension"): row.get("state") for row in validation["dimension_assessments"]}
+        core = [states.get(name) for name in ("BUYER_PROBLEM_ALIGNMENT", "PURCHASE_TRIGGER_ALIGNMENT", "DIFFERENTIATION")]
+        unresolved_counterevidence = any(bool(row.get("counterevidence_ids")) for row in validation.get("differentiation_observations", []))
+        if "INSUFFICIENT_EVIDENCE" in core:
+            expected = "CONCEPT_INSUFFICIENT_EVIDENCE"
+        elif validation.get("research_coverage_status") == "SUFFICIENT" and "WEAK" in core:
+            expected = "CONCEPT_EVIDENCE_WEAK"
+        elif "MIXED" in core or unresolved_counterevidence:
+            expected = "CONCEPT_EVIDENCE_MIXED"
+        elif core == ["SUPPORTED", "SUPPORTED", "SUPPORTED"]:
+            expected = "CONCEPT_EVIDENCE_SUPPORTED"
+        else:
+            expected = "CONCEPT_INSUFFICIENT_EVIDENCE"
+        if card.get("concept_validation_state") != expected:
+            return False
+    return True
 
 
 def validate_decision_template(template: dict[str, Any]) -> None:
@@ -378,7 +428,8 @@ def _cards(concepts: list[dict[str, Any]], validations: list[dict[str, Any]], ca
     for concept in sorted(concepts, key=lambda c: (c["direction_id"], c["concept_id"])):
         val = validation_map[concept["concept_id"]]
         assessments = val["dimension_assessments"]
-        state = derive_concept_state(assessments, val["research_coverage_status"])
+        material_counterevidence = any(bool(row.get("counterevidence_ids")) for row in val["differentiation_observations"])
+        state = derive_concept_state(assessments, val["research_coverage_status"], material_counterevidence)
         card = {k: concept[k] for k in (
             "concept_id", "direction_id", "canonical_direction_key", "concept_label", "target_buyer_segment", "operator_context",
             "problem_statement", "purchase_trigger_hypothesis", "primary_opportunity_axis", "paid_value_exchange_hypothesis",
@@ -847,7 +898,7 @@ def _render_bundle(input_paths: dict[str, Path], capture_path: Path, output: Pat
         "no_direct_wtp_from_competitor_price": all(v["evidence_type"] != "DIRECT_WTP_STATEMENT" or any(e["evidence_type"] == "DIRECT_WTP_STATEMENT" for e in evidence if e["evidence_id"] in v["evidence_ids"]) for v in paid),
         "seven_dimensions_each": all(len(c["dimension_assessments"]) == 7 and {d["dimension"] for d in c["dimension_assessments"]} == set(DIMENSIONS) for c in cards),
         "dimension_schema_complete": all({"dimension", "state", "basis", "evidence_ids", "source_ids", "risk_flags", "unknowns"} <= d.keys() for c in cards for d in c["dimension_assessments"]),
-        "hard_rule_states": all(c["concept_validation_state"] == derive_concept_state(c["dimension_assessments"], c["research_coverage_status"]) for c in cards),
+        "hard_rule_state_precedence_independently_verified": _qa_hard_rule_states(cards, capture["validations"]),
         "decision_template_undecided": capture["decision_template"] == {"decision_status":"UNDECIDED", "advanced_concept_ids":[], "requested_refinement_concept_ids":[], "held_concept_ids":[], "dropped_concept_ids":[], "build_none":False, "rationale":None, "decided_at":None},
         "sqlite_integrity": integrity == "ok",
         "sqlite_foreign_keys": not fk,

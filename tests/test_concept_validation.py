@@ -209,6 +209,25 @@ def test_generic_followup_cannot_bypass_concept_targeting():
         validation.validate_query_coverage(capture["concepts"], capture["queries"])
 
 
+def test_c1_differentiation_query_must_target_relay_gap_not_sibling_identity():
+    capture, _ = _fixture()
+    concept = capture["concepts"][0]
+    old_id = concept["concept_id"]
+    concept["concept_id"] = validation.C1_RELAY_CONCEPT_ID
+    for query in capture["queries"]:
+        if query["concept_id"] == old_id:
+            query["concept_id"] = validation.C1_RELAY_CONCEPT_ID
+    q04 = next(q for q in capture["queries"] if q["concept_id"] == validation.C1_RELAY_CONCEPT_ID and q["purpose"] == "DIFFERENTIATION_GAP")
+    q04["query_text"] = "conceptspecific Minecraft proxy network chat plugin missing LuckPerms prefix suffix after cross-server setup"
+    with pytest.raises(validation.ConceptValidationError, match="C1 differentiation query"):
+        validation.validate_query_coverage(capture["concepts"], capture["queries"])
+    q04["query_text"] = "conceptspecific Minecraft cross-server chat network plugin"
+    with pytest.raises(validation.ConceptValidationError, match="C1 differentiation query"):
+        validation.validate_query_coverage(capture["concepts"], capture["queries"])
+    q04["query_text"] = "conceptspecific Minecraft server operators unmet global chat relay continuity reliability coverage after Paper backends split behind Velocity proxy network"
+    validation.validate_query_coverage(capture["concepts"], capture["queries"])
+
+
 def test_every_concept_has_each_mandatory_purpose_exactly_once():
     capture, _ = _fixture()
     capture["queries"].append(dict(capture["queries"][0], query_id="q-duplicate-pair", execution_order=999))
@@ -341,6 +360,37 @@ def test_concept_state_uses_only_core_dimensions_and_requires_adequate_coverage_
     rows[0]["state"] = "WEAK"
     assert validation.derive_concept_state(rows, "PARTIAL") == "CONCEPT_INSUFFICIENT_EVIDENCE"
     assert validation.derive_concept_state(rows, "SUFFICIENT") == "CONCEPT_EVIDENCE_WEAK"
+
+
+def test_sufficient_weak_precedes_mixed_core_state():
+    rows = [{"dimension": name, "state": "SUPPORTED"} for name in validation.DIMENSIONS]
+    rows[0]["state"] = "WEAK"
+    rows[1]["state"] = "WEAK"
+    rows[3]["state"] = "MIXED"
+    assert validation.derive_concept_state(rows, "SUFFICIENT") == "CONCEPT_EVIDENCE_WEAK"
+
+
+def test_remaining_material_counterevidence_prevents_supported_state():
+    rows = [{"dimension": name, "state": "SUPPORTED"} for name in validation.DIMENSIONS]
+    assert validation.derive_concept_state(rows, "SUFFICIENT", material_counterevidence=True) == "CONCEPT_EVIDENCE_MIXED"
+
+
+def test_hard_rule_qa_uses_independent_precedence_oracle(monkeypatch):
+    capture, _ = _fixture()
+    validation_row = capture["validations"][0]
+    core_states = {"BUYER_PROBLEM_ALIGNMENT": "WEAK", "PURCHASE_TRIGGER_ALIGNMENT": "WEAK", "DIFFERENTIATION": "MIXED"}
+    for assessment in validation_row["dimension_assessments"]:
+        if assessment["dimension"] in core_states:
+            assessment["state"] = core_states[assessment["dimension"]]
+    validation_row["research_coverage_status"] = "SUFFICIENT"
+    cards = validation._cards(capture["concepts"], capture["validations"], capture)
+    assert cards[0]["concept_validation_state"] == "CONCEPT_EVIDENCE_WEAK"
+    assert validation._qa_hard_rule_states(cards, capture["validations"])
+
+    monkeypatch.setattr(validation, "derive_concept_state", lambda *args, **kwargs: "CONCEPT_EVIDENCE_MIXED")
+    cards_from_wrong_deriver = validation._cards(capture["concepts"], capture["validations"], capture)
+    assert cards_from_wrong_deriver[0]["concept_validation_state"] == "CONCEPT_EVIDENCE_MIXED"
+    assert not validation._qa_hard_rule_states(cards_from_wrong_deriver, capture["validations"])
 
 
 def test_invalid_gap_code_fails_closed():
