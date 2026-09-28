@@ -12,6 +12,7 @@ def main() -> None:
     parser.add_argument("--yee79-db", required=True, type=Path)
     parser.add_argument("--yee77-db", required=True, type=Path)
     parser.add_argument("--capture", required=True, type=Path)
+    parser.add_argument("--follow-up-capture", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
 
@@ -22,7 +23,8 @@ def main() -> None:
         ["git", "merge-base", "--is-ancestor", BASELINE_COMMIT, execution_commit], check=True
     )
     result = build_dataset(
-        args.yee79_db, args.yee77_db, args.capture, args.output_dir, execution_commit
+        args.yee79_db, args.yee77_db, args.capture, args.output_dir, execution_commit,
+        followup_capture_path=args.follow_up_capture, baseline_ancestor_verified=True,
     )
     print(f"status={result['status']}")
     print(f"output_dir={result['output_dir']}")
