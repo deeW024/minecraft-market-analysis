@@ -24,6 +24,7 @@ yee77-category-targeted-research = "market_analysis.category_targeted_research_c
 yee79-category-decision-gate = "market_analysis.category_decision_gate_cli:main"
 yee81-deep-commercial-validation = "market_analysis.deep_commercial_validation_cli:main"
 yee83-product-concept-validation = "market_analysis.concept_validation_cli:main"
+yee95-targeted-concept-refinement = "market_analysis.targeted_concept_refinement_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
