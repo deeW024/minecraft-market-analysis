@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import shutil
 import sqlite3
@@ -415,16 +416,23 @@ def _csv_cell(value: Any) -> str:
     return value if isinstance(value, str) else _json(value)
 
 
-def _write_table(out: Path, base: str, rows: list[dict[str, Any]]) -> None:
-    rows = sorted(rows, key=lambda r: _json(r))
-    jsonl = "".join(_json(row) + "\n" for row in rows)
-    (out / f"{base}.jsonl").write_text(jsonl, encoding="utf-8", newline="\n")
+def _table_jsonl(rows: list[dict[str, Any]]) -> bytes:
+    return "".join(_json(row) + "\n" for row in sorted(rows, key=lambda r: _json(r))).encode("utf-8")
+
+
+def _table_csv(rows: list[dict[str, Any]]) -> bytes:
     columns = sorted({key for row in rows for key in row})
-    with (out / f"{base}.csv").open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.writer(stream, lineterminator="\n")
-        writer.writerow(columns)
-        for row in rows:
-            writer.writerow([_csv_cell(row.get(column)) for column in columns])
+    stream = io.StringIO(newline="")
+    writer = csv.writer(stream, lineterminator="\n")
+    writer.writerow(columns)
+    for row in sorted(rows, key=lambda r: _json(r)):
+        writer.writerow([_csv_cell(row.get(column)) for column in columns])
+    return stream.getvalue().encode("utf-8")
+
+
+def _write_table(out: Path, base: str, rows: list[dict[str, Any]]) -> None:
+    (out / f"{base}.jsonl").write_bytes(_table_jsonl(rows))
+    (out / f"{base}.csv").write_bytes(_table_csv(rows))
 
 
 def _write_sqlite(path: Path, rows: dict[str, list[dict[str, Any]]]) -> None:
@@ -587,6 +595,64 @@ def _validate_sqlite(path: Path) -> tuple[str, int]:
         db.close()
 
 
+def _reconcile_sqlite_and_exports(out: Path, rows: dict[str, list[dict[str, Any]]], sqlite_path: Path) -> bool:
+    db = sqlite3.connect(f"file:{sqlite_path.resolve().as_posix()}?mode=ro", uri=True)
+    try:
+        expected_tables = {
+            "metadata": rows["metadata"], "input_provenance": rows["input_provenance"],
+            "authorized_concept_cohort": rows["authorized_concept_cohort"], "concepts": rows["concepts"],
+            **{table: rows[row_key] for table, row_key in {
+                "sources": "sources", "queries": "queries", "evidence": "evidence", "operator_cases": "operator_cases",
+                "root_causes": "root_causes", "recurrence_assessments": "recurrence_assessments",
+                "incumbent_capabilities": "incumbent_capabilities", "refined_wedges": "refined_wedges",
+                "differentiation_assessments": "differentiation_assessments", "paid_value_observations": "paid_value_observations",
+                "feasibility_observations": "feasibility_observations", "support_observations": "support_observations",
+                "concept_refinement_cards": "concept_refinement_cards",
+            }.items()},
+            "supervisor_decision_template": rows["supervisor_decision_template"],
+        }
+        for table, expected in expected_tables.items():
+            if db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] != len(expected):
+                return False
+        if dict(db.execute("SELECT key,value FROM metadata")) != {r["key"]: r["value"] for r in rows["metadata"]}:
+            return False
+        if db.execute("SELECT input_name,sha256,read_only FROM input_provenance ORDER BY input_name").fetchall() != [
+            (r["input_name"], r["sha256"], 1) for r in sorted(rows["input_provenance"], key=lambda item: item["input_name"])
+        ]:
+            return False
+        if db.execute("SELECT concept_id,cohort_sha256 FROM authorized_concept_cohort ORDER BY concept_id").fetchall() != [
+            (r["concept_id"], r["cohort_sha256"]) for r in sorted(rows["authorized_concept_cohort"], key=lambda item: item["concept_id"])
+        ]:
+            return False
+        if db.execute("SELECT concept_id,concept_label,parent_work_order,plugin_only FROM concepts ORDER BY concept_id").fetchall() != [
+            (r["concept_id"], r["concept_label"], r["parent_work_order"], 1) for r in sorted(rows["concepts"], key=lambda item: item["concept_id"])
+        ]:
+            return False
+        json_tables = {
+            "sources": "sources", "queries": "queries", "evidence": "evidence", "operator_cases": "operator_cases",
+            "root_causes": "root_causes", "recurrence_assessments": "recurrence_assessments",
+            "incumbent_capabilities": "incumbent_capabilities", "refined_wedges": "refined_wedges",
+            "differentiation_assessments": "differentiation_assessments", "paid_value_observations": "paid_value_observations",
+            "feasibility_observations": "feasibility_observations", "support_observations": "support_observations",
+            "concept_refinement_cards": "concept_refinement_cards",
+        }
+        for table, row_key in json_tables.items():
+            actual = sorted((json.loads(r[0]) for r in db.execute(f'SELECT record_json FROM "{table}"')), key=_json)
+            expected = sorted(rows[row_key], key=_json)
+            if actual != expected:
+                return False
+        if json.loads(db.execute("SELECT record_json FROM supervisor_decision_template WHERE singleton_id=1").fetchone()[0]) != rows["supervisor_decision_template"][0]:
+            return False
+        for filename, row_key in TABLE_EXPORTS.items():
+            if (out / f"{filename}.jsonl").read_bytes() != _table_jsonl(rows[row_key]):
+                return False
+            if (out / f"{filename}.csv").read_bytes() != _table_csv(rows[row_key]):
+                return False
+        return True
+    finally:
+        db.close()
+
+
 def _qa(capture: dict[str, Any], rows: dict[str, list[dict[str, Any]]], input_hashes: dict[str, str], input_paths: dict[str, Path], sqlite_path: Path, replay_identical: bool, execution_commit: str) -> dict[str, Any]:
     failed: list[str] = []
     cards = rows["concept_refinement_cards"]
@@ -617,8 +683,10 @@ def _qa(capture: dict[str, Any], rows: dict[str, list[dict[str, Any]]], input_ha
         forbidden = {k.casefold() for k in card if any(x in k.casefold() for x in ("score", "rank", "winner", "recommendation", "product_spec", "implementation_plan"))}
         if forbidden: failed.append(f"forbidden_fields:{card['concept_id']}:{','.join(sorted(forbidden))}")
     db_integrity, fk_violations = _validate_sqlite(sqlite_path)
+    reconcile_ok = _reconcile_sqlite_and_exports(sqlite_path.parent, rows, sqlite_path)
     if db_integrity != "ok": failed.append("sqlite_integrity")
     if fk_violations: failed.append("sqlite_foreign_keys")
+    if not reconcile_ok: failed.append("jsonl_csv_sqlite_reconciliation")
     after_hashes = {name: sha256_file(path) for name, path in sorted(input_paths.items())}
     if after_hashes != input_hashes: failed.append("upstream_immutability")
     if not replay_identical: failed.append("frozen_capture_replay")
@@ -638,6 +706,7 @@ def _qa(capture: dict[str, Any], rows: dict[str, list[dict[str, Any]]], input_ha
         "observed_purchase_or_payment_count": sum(row["evidence_type"] == "OBSERVED_PURCHASE_OR_PAYMENT" for row in rows["paid_value_observations"]),
         "input_sha256_before": input_hashes, "input_sha256_after": after_hashes,
         "sqlite_integrity_check": db_integrity, "sqlite_foreign_key_violations": fk_violations,
+        "jsonl_csv_sqlite_reconciliation": reconcile_ok,
         "frozen_capture_replay_byte_identical": replay_identical, "execution_commit": execution_commit,
         "prohibited_scope_executed": False,
     }
