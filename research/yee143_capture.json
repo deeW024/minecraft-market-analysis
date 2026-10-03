@@ -1,0 +1,3300 @@
+{
+  "additional_observations": [
+    {
+      "canonical_identity": "vendor:advancedplugins/AdvancedJobs",
+      "currency_display": "EUR",
+      "kind": "displayed_price",
+      "observation_id": "advancedjobs_price",
+      "pool_id": "job_wage_operations",
+      "semantic_note": "Promotional offer only; fresh re-open of YEE-81 supplemental precedent, no paid traction or cohort inheritance.",
+      "source_id": "advancedjobs_offer",
+      "tier": "PAID_PRECEDENT_ONLY",
+      "value": 17.99,
+      "vendor": "AdvancedPlugins"
+    }
+  ],
+  "as_of": "2026-10-03",
+  "buyer_payments": [
+    {
+      "actor_id": "diary_operator",
+      "canonical_identity": "voxel:2625",
+      "payment_evidence": "First-person premium purchase list explicitly includes bought CustomCrops.",
+      "source_id": "buyer_diary",
+      "trigger": "Custom crop gameplay; detailed reason unknown."
+    },
+    {
+      "actor_id": "diary_operator",
+      "canonical_identity": "voxel:2723",
+      "payment_evidence": "First-person premium purchase list explicitly includes bought CustomFishing.",
+      "source_id": "buyer_diary",
+      "trigger": "Action-point mechanics; documentation complaint."
+    },
+    {
+      "actor_id": "diary_operator",
+      "canonical_identity": "voxel:4471",
+      "payment_evidence": "First-person purchase list reports RedisChat purchase and replacement of ChatControl.",
+      "source_id": "buyer_diary",
+      "trigger": "Lower configuration effort in the buyer's report."
+    },
+    {
+      "actor_id": "diary_operator",
+      "canonical_identity": "builtbybit:46692",
+      "payment_evidence": "First-person purchase list reports ExcellentShop purchase.",
+      "source_id": "buyer_diary",
+      "trigger": "Daily limits and in-game editor."
+    },
+    {
+      "actor_id": "diary_operator",
+      "canonical_identity": "builtbybit:25314",
+      "payment_evidence": "First-person purchase list reports AquaticCrates purchase.",
+      "source_id": "buyer_diary",
+      "trigger": "Custom-model workflow and developer help."
+    },
+    {
+      "actor_id": "diary_operator",
+      "canonical_identity": "voxel:634",
+      "payment_evidence": "First-person purchase list reports AdvancedEnchantments purchase.",
+      "source_id": "buyer_diary",
+      "trigger": "Configuration depth."
+    },
+    {
+      "actor_id": "mcmmo_forum_buyers_channel",
+      "canonical_identity": "voxel:727",
+      "payment_evidence": "Author page includes two explicit mcMMO buyer purchase statements; retained as one conservative historical channel.",
+      "source_id": "buyer_mcmmo",
+      "trigger": "One wanted to use it on a server with friends; another had purchase-access friction."
+    }
+  ],
+  "coverage_limits": [
+    "Complete accepted deterministic scan; targeted fresh validation is not a census of all 3232 REVIEW commercial rows.",
+    "All remaining REVIEW rows stay explicitly EXCLUDED_UNVERIFIED; excluded or inaccessible is UNKNOWN payment/form, never negative demand.",
+    "BuiltByBit dominates current counter access. Voxel/Spigot public access failures retained; no bypass.",
+    "Counters are per-product observations; no sums, revenue, unique-buyer, WTP, market size or rank.",
+    "Buyer stories are dated anonymous self-reports, not independently verified receipts. Several purchases share one buyer.",
+    "No supervisor advancement decisions or new product concepts."
+  ],
+  "free_context": [
+    {
+      "comparison_tested": false,
+      "context": "Self-compilation supplies core runtime; premade content and verification-gated assistance are vendor-offered value axes. Why each buyer paid remains unknown.",
+      "form": "SAME_PRODUCT_SOURCE_BUILD",
+      "pool_id": "crop_operations",
+      "source_id": "repo_crops",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Core Paper runtime can be built locally; one buyer selected its action-point system but criticized documentation. No free-to-paid migration established.",
+      "form": "SAME_PRODUCT_SOURCE_BUILD",
+      "pool_id": "fishing_operations",
+      "source_id": "repo_fishing",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Diagnostic alternative; automation equivalence not established.",
+      "form": "FREE_PLUGIN",
+      "pool_id": "performance_operations",
+      "source_id": "repo_spark",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Source build route exists; official binary/support convenience motive not independently proven.",
+      "form": "SAME_PRODUCT_SOURCE_BUILD",
+      "pool_id": "performance_operations",
+      "source_id": "repo_react",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Credible terrain framework; plugin route only. No comparative quality/runtime evidence.",
+      "form": "OPEN_SOURCE_PLUGIN_EDITION",
+      "pool_id": "world_generation_operations",
+      "source_id": "repo_terra",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Plugin source is available; packs and mod editions excluded as standalone products.",
+      "form": "SAME_PRODUCT_SOURCE_BUILD",
+      "pool_id": "world_generation_operations",
+      "source_id": "repo_iris",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Name/information display overlaps; author restricts free support. No verified paid buyer switching from TAB.",
+      "form": "FREE_PLUGIN",
+      "pool_id": "player_name_presentation",
+      "source_id": "repo_tab",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Paid listing explicitly permits self-compilation. Free-granted license appears in review; do not infer all counter entries represent cash payments.",
+      "form": "SAME_PRODUCT_SOURCE_BUILD",
+      "pool_id": "player_name_presentation",
+      "source_id": "product_voxel_2543",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Official wiki separates free and premium shop editions. Buyer migration observed from a different paid shop, not from this free edition.",
+      "form": "FREE_PLUGIN_EDITION",
+      "pool_id": "shop_operations",
+      "source_id": "product_voxel_908",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Economy suite partial substitute; multi-currency/banking equivalence unverified.",
+      "form": "OPEN_SOURCE_PLUGIN",
+      "pool_id": "currency_operations",
+      "source_id": "repo_essentials",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Commands/administration overlap; workflow equivalence unverified.",
+      "form": "OPEN_SOURCE_PLUGIN",
+      "pool_id": "staff_administration",
+      "source_id": "repo_essentials",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Active fork resolves archived upstream; commercial license/support friction recorded separately.",
+      "form": "OPEN_SOURCE_PLUGIN",
+      "pool_id": "clan_operations",
+      "source_id": "repo_clans",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Jobs runtime source exists; runtime parity and free ready-made binary pricing not verified.",
+      "form": "SOURCE_BUILD_CONTEXT",
+      "pool_id": "job_wage_operations",
+      "source_id": "repo_jobs",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "RPG leveling/abilities partial alternative; no representative buyer motive comparison.",
+      "form": "OPEN_SOURCE_PLUGIN",
+      "pool_id": "rpg_skill_progression",
+      "source_id": "repo_skills",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Packet rate controls exist; unknown coverage of application-level exploits and duplication versus paid plugins.",
+      "form": "BASE_PLATFORM_SUBSTITUTE",
+      "pool_id": "exploit_protection",
+      "source_id": "paper_limiter",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Explicit paid official binaries/support model despite Apache source; this is vendor evidence of packaging/support axis, not buyer motive prevalence.",
+      "form": "SAME_PRODUCT_SOURCE_BUILD",
+      "pool_id": "network_data_sync",
+      "source_id": "repo_husksync",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Functionally credible server alternative, but opened page does not establish free price. Cannot count as verified free supply.",
+      "form": "SUBSTITUTE_PRICE_UNKNOWN",
+      "pool_id": "enchantment_operations",
+      "source_id": "docs_enchants",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Credible server substitute; current price not established from opened documentation.",
+      "form": "SUBSTITUTE_PRICE_UNKNOWN",
+      "pool_id": "crate_reward_operations",
+      "source_id": "docs_crates",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    },
+    {
+      "comparison_tested": false,
+      "context": "Premium support verification and public API-help documented; no current independent free plugin equivalence verified.",
+      "form": "SUPPORT_ACCESS_CONTEXT",
+      "pool_id": "custom_content_operations",
+      "source_id": "docs_craft",
+      "stage": "AFTER_DIRECT_PAID_SIGNAL"
+    }
+  ],
+  "pools": [
+    {
+      "advancement_decision": null,
+      "assessment": "No independent buyer payment beyond listing counter retained; review reports license-duration and support friction.",
+      "buyer_job": "Operate persistent player clans",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "clan_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "player_mechanics"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "Single vendor and marketplace counter. Asset/config packs excluded; independent buyer trigger and free substitute evidence unresolved.",
+      "buyer_job": "Operate player cosmetic customization",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "cosmetic_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "player_mechanics"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "Independent vendors EcoCrates/AquaticCrates. Buyer cites model workflow and help; another review regrets paying and cites update/support delays. AquaticCrates reviews allege abandonment and a nonworking rewrite; support displayed for 1 year, not lifetime.",
+      "buyer_job": "Operate configurable crate rewards",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "economy",
+      "pool_id": "crate_reward_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "jobs_and_rewards"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "One vendor. Independent dated buyer reports purchase; source compilation and required item frameworks constrain convenience value.",
+      "buyer_job": "Operate custom crop farming",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "crop_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "player_mechanics"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "One vendor/counter; no independent payment motive found. Distinct from shop buying/selling and wages.",
+      "buyer_job": "Operate currencies and player balances",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "economy",
+      "pool_id": "currency_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "currency_and_balances"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "CraftEngine is the only admitted paid product here. Fresh ItemsAdder evidence is parked because native voxel:1851 is OUT_OF_SCOPE and the spec permits REVIEW recovery only; marketplace aliases cannot bypass that boundary. No speculative sub-feature demand split.",
+      "buyer_job": "Deploy custom content to vanilla-client servers",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "custom_content_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "items_and_crafting"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "Two independent vendors; dated buyer cites configurability/depth. Marketplace/vendor version discrepancy and unresolved support complaint retained.",
+      "buyer_job": "Operate configurable custom enchantments",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "enchantment_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "items_and_crafting"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "Two distinct vendors and large product-attributable counters on one marketplace. Buyer motive specificity and effectiveness untested.",
+      "buyer_job": "Protect servers against packet crash/exploit abuse",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "protection",
+      "pool_id": "exploit_protection",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "abuse_and_spam_controls"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "One vendor. Independent buyer purchase chosen for action-point mechanics; documentation pain. Source-build availability does not invalidate purchase. AuraSkills documentation and dissatisfied review conflict; unresolved.",
+      "buyer_job": "Operate customized fishing gameplay and loot",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "fishing_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "player_mechanics"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "EcoJobs has direct counter; AdvancedJobs is independent price precedent only and never independent paid traction.",
+      "buyer_job": "Operate job wages and economic leveling",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "economy",
+      "pool_id": "job_wage_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "jobs_and_rewards"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "Small stale RedisChat counter plus historical independent buyer switching from difficult paid ChatControl setup. Tentative new ChatControl intent is not a completed payment.",
+      "buyer_job": "Operate chat between Minecraft servers",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "communication",
+      "pool_id": "network_communication",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "player_chat"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "One vendor/counter; vendor explicitly sells binaries and verified customer support despite source availability. Purchase motives and recovery correctness untested.",
+      "buyer_job": "Keep player data consistent across servers",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "server_utilities",
+      "pool_id": "network_data_sync",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "general_server_utility"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "React counter supports one product only. Free profiling and same-product source build create strong contextual pressure; automation benefit not independently tested.",
+      "buyer_job": "Diagnose and manage server performance",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "server_utilities",
+      "pool_id": "performance_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "performance_and_efficiency"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "One product/vendor. Counter and free-grant review coexist; independent cash-payment/motive evidence absent.",
+      "buyer_job": "Present customized player names",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "communication",
+      "pool_id": "player_name_presentation",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "chat_presentation"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "EcoSkills counter and independently authored mcMMO with explicit historical buyers; skill progression distinguished from wage payouts.",
+      "buyer_job": "Operate player skills and RPG progression",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "gameplay",
+      "pool_id": "rpg_skill_progression",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "progression"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "EcoShop and actual NightExpress ExcellentShop counters; buyer purchase motivated by daily limits/editor. EconomyShopGUI Premium is precedent, not traction.",
+      "buyer_job": "Operate player-facing buying and selling",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "economy",
+      "pool_id": "shop_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "shops_and_trading"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "One vendor/counter; operator value marketed, independent buyer pain and support quality unknown.",
+      "buyer_job": "Operate server administration through a GUI",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "administration",
+      "pool_id": "staff_administration",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "general_administration"
+    },
+    {
+      "advancement_decision": null,
+      "assessment": "Iris plugin edition counter; same vendor exceptional-product concentration. Paid packs and mod runtimes excluded.",
+      "buyer_job": "Generate and manage customized terrain",
+      "category_assignment": "YEE-143 local buyer-job crosswalk to accepted YEE-61 taxonomy; does not modify accepted membership.",
+      "category_id": "world_management",
+      "pool_id": "world_generation_operations",
+      "selected_for_next_work_order": null,
+      "subcategory_id": "world_lifecycle"
+    }
+  ],
+  "products": [
+    {
+      "canonical_identity": "vendor:advancedplugins/AdvancedJobs",
+      "identity_match_basis": "Fresh external offer-only context; no canonical row or traction inferred.",
+      "lane": "EXTERNAL_CORROBORATION",
+      "license_context": "Lifetime updates/support claimed; EUR17.99 promotional offer.",
+      "pool_id": "job_wage_operations",
+      "positive_product_form_evidence": "Opened vendor page explicitly markets a Spigot jobs plugin.",
+      "source_id": "advancedjobs_offer",
+      "title": "AdvancedJobs",
+      "vendor": "AdvancedPlugins"
+    },
+    {
+      "canonical_identity": "voxel:2625",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "crop_operations",
+      "positive_product_form_evidence": "Paper crop plugin; official repository identifies Paper server runtime; listing describes custom growing cycles and required item frameworks.",
+      "source_id": "product_voxel_2625",
+      "title": "CustomCrops",
+      "vendor": "XiaoMoMi"
+    },
+    {
+      "canonical_identity": "voxel:2723",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "fishing_operations",
+      "positive_product_form_evidence": "Official repository explicitly identifies a Paper fishing plugin; marketplace describes fishing minigames and loot.",
+      "source_id": "product_voxel_2723",
+      "title": "CustomFishing",
+      "vendor": "XiaoMoMi"
+    },
+    {
+      "canonical_identity": "voxel:2543",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "player_name_presentation",
+      "positive_product_form_evidence": "Listing explicitly calls this a plugin recreating a discontinued Spigot plugin; describes server player-name presentation.",
+      "source_id": "product_voxel_2543",
+      "title": "CustomNameplates",
+      "vendor": "XiaoMoMi"
+    },
+    {
+      "canonical_identity": "voxel:7624",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "custom_content_operations",
+      "positive_product_form_evidence": "Vendor docs and listing establish server-side runtime, vanilla clients, packet handling and Bukkit plugin comparisons; generated resource packs are outputs, not product form.",
+      "source_id": "product_voxel_7624",
+      "title": "CraftEngine",
+      "vendor": "XiaoMoMi"
+    },
+    {
+      "canonical_identity": "voxel:490",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "enchantment_operations",
+      "positive_product_form_evidence": "Listing describes registered server enchantments, plugin configuration and libreforge integration.",
+      "source_id": "product_voxel_490",
+      "title": "EcoEnchants",
+      "vendor": "Exanthiax"
+    },
+    {
+      "canonical_identity": "voxel:4736",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "performance_operations",
+      "positive_product_form_evidence": "Official repository documents building the shaded plugin jar; listing describes automated Minecraft server performance management.",
+      "source_id": "product_voxel_4736",
+      "title": "React",
+      "vendor": "VolmitSoftware"
+    },
+    {
+      "canonical_identity": "voxel:3623",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "world_generation_operations",
+      "positive_product_form_evidence": "Official repository explicitly separates Bukkit-family plugin jars installed in plugins/ from Fabric/Forge/NeoForge mods. Only plugin edition is eligible.",
+      "source_id": "product_voxel_3623",
+      "title": "Iris",
+      "vendor": "VolmitSoftware"
+    },
+    {
+      "canonical_identity": "voxel:2879",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "cosmetic_operations",
+      "positive_product_form_evidence": "Listing describes Minecraft server cosmetics runtime and plugin integration; cosmetic models are input assets, not the product being admitted.",
+      "source_id": "product_voxel_2879",
+      "title": "CosmeticsCore",
+      "vendor": "LoneDev"
+    },
+    {
+      "canonical_identity": "voxel:1162",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "clan_operations",
+      "positive_product_form_evidence": "Listing explicitly markets a Minecraft clan plugin with server clan persistence and API. UlrichBR/TribeCraft listing identity retained.",
+      "source_id": "product_voxel_1162",
+      "title": "UltimateClans",
+      "vendor": "UlrichBR"
+    },
+    {
+      "canonical_identity": "voxel:3327",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "exploit_protection",
+      "positive_product_form_evidence": "Listing explicitly identifies an anti-crash and duplication prevention server plugin.",
+      "source_id": "product_voxel_3327",
+      "title": "ExploitFixer",
+      "vendor": "LinsaFTW"
+    },
+    {
+      "canonical_identity": "voxel:708",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "exploit_protection",
+      "positive_product_form_evidence": "Listing explicitly identifies a server plugin protecting against packet crash exploits; native LPX-MORTAL naming alias retained.",
+      "source_id": "product_voxel_708",
+      "title": "LPX",
+      "vendor": "Ytnoos"
+    },
+    {
+      "canonical_identity": "voxel:634",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "enchantment_operations",
+      "positive_product_form_evidence": "Listing explicitly describes a custom-enchantments server plugin.",
+      "source_id": "product_voxel_634",
+      "title": "AdvancedEnchantments",
+      "vendor": "AdvancedPlugins"
+    },
+    {
+      "canonical_identity": "voxel:4471",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "network_communication",
+      "positive_product_form_evidence": "Listing explicitly identifies a cross-server Minecraft chat plugin; identity matches native vendor and title.",
+      "source_id": "product_voxel_4471",
+      "title": "RedisChat",
+      "vendor": "Emibergo02"
+    },
+    {
+      "canonical_identity": "voxel:2149",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "crate_reward_operations",
+      "positive_product_form_evidence": "Listing identifies server crate plugin with reward operation; native confirmed membership retained.",
+      "source_id": "product_voxel_2149",
+      "title": "EcoCrates",
+      "vendor": "Exanthiax"
+    },
+    {
+      "canonical_identity": "voxel:49",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "staff_administration",
+      "positive_product_form_evidence": "Listing explicitly describes a plugin to manage a Minecraft server through an administrative GUI.",
+      "source_id": "product_voxel_49",
+      "title": "AdminGUI Premium",
+      "vendor": "BlackRabbit3"
+    },
+    {
+      "canonical_identity": "voxel:3177",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "shop_operations",
+      "positive_product_form_evidence": "Listing identifies Minecraft server shop plugin with configuration-driven buying and selling.",
+      "source_id": "product_voxel_3177",
+      "title": "EcoShop",
+      "vendor": "Exanthiax"
+    },
+    {
+      "canonical_identity": "voxel:1206",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "currency_operations",
+      "positive_product_form_evidence": "Listing explicitly describes a server economy plugin for currencies, banks and balances.",
+      "source_id": "product_voxel_1206",
+      "title": "UltraEconomy",
+      "vendor": "TechsCode"
+    },
+    {
+      "canonical_identity": "voxel:2857",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "job_wage_operations",
+      "positive_product_form_evidence": "Listing explicitly describes a server jobs plugin with wages and job levels.",
+      "source_id": "product_voxel_2857",
+      "title": "EcoJobs",
+      "vendor": "Exanthiax"
+    },
+    {
+      "canonical_identity": "voxel:1351",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "rpg_skill_progression",
+      "positive_product_form_evidence": "Listing explicitly describes an RPG skills/progression server plugin.",
+      "source_id": "product_voxel_1351",
+      "title": "EcoSkills",
+      "vendor": "Exanthiax"
+    },
+    {
+      "canonical_identity": "voxel:1634",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "network_data_sync",
+      "positive_product_form_evidence": "Official repository explicitly directs the plugin jar to each server's plugins/ directory; Fabric mod edition excluded.",
+      "source_id": "product_voxel_1634",
+      "title": "HuskSync",
+      "vendor": "William278"
+    },
+    {
+      "canonical_identity": "builtbybit:46692",
+      "identity_match_basis": "Fresh external corroboration only; never inserted into accepted YEE-61 membership.",
+      "lane": "EXTERNAL_CORROBORATION",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; offer only.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "Lifetime"
+      },
+      "pool_id": "shop_operations",
+      "positive_product_form_evidence": "Fresh listing identifies a GUI/chest-shop server plugin. NOT voxel:6271, a separately authored configuration.",
+      "source_id": "product_builtbybit_46692",
+      "title": "ExcellentShop",
+      "vendor": "NightExpress"
+    },
+    {
+      "canonical_identity": "builtbybit:25314",
+      "identity_match_basis": "Fresh external corroboration only; never inserted into accepted YEE-61 membership.",
+      "lane": "EXTERNAL_CORROBORATION",
+      "license_context": {
+        "license_display": "Standard EULA; own projects with attribution",
+        "license_verification": "Opened main licensing block on 2026-10-03; offer only.",
+        "support_display": "Standard; download, updates and creator support",
+        "support_duration_display": "1 year"
+      },
+      "pool_id": "crate_reward_operations",
+      "positive_product_form_evidence": "Fresh listing identifies a server crate plugin, matching LARKYY product mentioned by the buyer.",
+      "source_id": "product_builtbybit_25314",
+      "title": "AquaticCrates",
+      "vendor": "LARKYY"
+    },
+    {
+      "canonical_identity": "voxel:727",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": "Displayed marketplace license/support scope is a claim; account/server limits, renewal requirements and executable license not comprehensively verified.",
+      "pool_id": "rpg_skill_progression",
+      "positive_product_form_evidence": "Official mcmmo.org explicitly identifies an RPG Spigot/Paper plugin and links its Voxel purchase route.",
+      "source_id": "product_voxel_727",
+      "title": "mcMMO",
+      "vendor": "nossr50"
+    },
+    {
+      "canonical_identity": "voxel:908",
+      "identity_match_basis": "Accepted YEE-61/YEE-29 title and author match current product identity; current marketplace URL is a local cross-source alias, not a new native row.",
+      "lane": "UPSTREAM_OR_RECOVERED",
+      "license_context": "Displayed marketplace license/support scope is a claim; account/server limits, renewal requirements and executable license not comprehensively verified.",
+      "pool_id": "shop_operations",
+      "positive_product_form_evidence": "Official GPPlugins wiki describes the server shop plugin and links its distinct premium listing; premium flags remain offer-only.",
+      "source_id": "product_voxel_908",
+      "title": "EconomyShopGUI Premium",
+      "vendor": "Gypopo"
+    }
+  ],
+  "purchase_intent": {
+    "actor_id": "chat_intent_commenter",
+    "completed_payment": false,
+    "pool_id": "network_communication",
+    "source_id": "buyer_chat_intent",
+    "statement": "Tentatively considering buying VelocityControl and ChatControl after Carbon trouble."
+  },
+  "research_queries": [
+    {
+      "batch": "001",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": null,
+      "request_payload_retained": false,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "002",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": null,
+      "request_payload_retained": false,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: open({\"ref_id\":\"https://builtbybit.com/resources/customcrops.36363/\",\"lineno\":null}); Total lines: 658",
+        " [wordlim: 200] Crawled: 2 days ago; Content type: text/html; Source: open({\"ref_id\":\"https://builtbybit.com/creators/xiaomomi.288876/\",\"lineno\":null}); Total lines: 268",
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: open({\"ref_id\":\"https://www.reddit.com/r/admincraft/comments/1htq0y7/\",\"lineno\":null}); Redirected to URL: https://www.reddit.com/r/admincraft/comments/1htq0y7/top_premium_plugins_purchased/; Total lines: 710"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "003",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": null,
+      "request_payload_retained": false,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "004",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": null,
+      "request_payload_retained": false,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: 2 weeks ago; Content type: text/html; Source: open({\"ref_id\":\"https://builtbybit.com/resources/react-smart-server-performance.56257/\",\"lineno\":null}); Total lines: 749",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://builtbybit.com/resources/ecoenchants.23935/\",\"lineno\":null}); Total lines: 653",
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: find({\"ref_id\":\"turn65view2\",\"pattern\":\"AquaticCrates\"}); Redirected to URL: https://www.reddit.com/r/admincraft/comments/1htq0y7/top_premium_plugins_purchased/; Total lines: 710",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn65view0\",\"pattern\":\"Purchases\"}); Total lines: 658"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "005",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 142,
+            "ref_id": "turn65view0"
+          },
+          {
+            "id": 143,
+            "ref_id": "turn65view0"
+          },
+          {
+            "id": 144,
+            "ref_id": "turn65view0"
+          }
+        ],
+        "find": [
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn67view0"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn67view1"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn65view0\",\"id\":142}); Total lines: 656",
+        " [wordlim: 200] Crawled: 2 days ago; Content type: text/html; Source: click({\"ref_id\":\"turn65view0\",\"id\":143}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn65view0\",\"id\":144}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn67view0\",\"pattern\":\"Purchases\"}); Total lines: 749",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn67view1\",\"pattern\":\"Purchases\"}); Total lines: 653"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "006",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": null,
+      "request_payload_retained": false,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "007",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://voxel.shop/product/876/lands-land-claim-plugin"
+          },
+          {
+            "ref_id": "https://voxel.shop/product/908/economyshopgui-premium"
+          },
+          {
+            "ref_id": "https://voxel.shop/product/1162/ultimate-clans"
+          },
+          {
+            "ref_id": "https://voxel.shop/product/2625/customcrops"
+          }
+        ],
+        "response_length": "short"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://voxel.shop/product/876/lands-land-claim-plugin\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://voxel.shop/product/908/economyshopgui-premium\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://voxel.shop/product/1162/ultimate-clans\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://voxel.shop/product/2625/customcrops\",\"lineno\":null}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "008",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn68view0"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn68view1"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn68view2"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn69search0"
+          },
+          {
+            "ref_id": "turn69search1"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn69search0\",\"lineno\":null}); Total lines: 739",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn69search1\",\"lineno\":null}); Total lines: 622",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn68view0\",\"pattern\":\"Purchases\"}); Total lines: 656",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn68view1\",\"pattern\":\"Purchases\"}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn68view2\",\"pattern\":\"Purchases\"}); Total lines: 607"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "009",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "\"CustomFishing\" \"LiteFish\" plugin purchase"
+          },
+          {
+            "q": "\"Ultimate Clans\" \"BuiltByBit\" UlrichBR"
+          },
+          {
+            "q": "\"MMOItems\" \"BuiltByBit\""
+          },
+          {
+            "q": "\"mcMMO\" \"BuiltByBit\" plugin"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "010",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn71view0"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn71view1"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "https://gpplugins.com/plugin/economyshopgui-premium"
+          },
+          {
+            "lineno": 31,
+            "ref_id": "turn65view2"
+          },
+          {
+            "lineno": 155,
+            "ref_id": "turn68view2"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://gpplugins.com/plugin/economyshopgui-premium\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: open({\"ref_id\":\"turn65view2\",\"lineno\":31}); Redirected to URL: https://www.reddit.com/r/admincraft/comments/1htq0y7/top_premium_plugins_purchased/; Total lines: 710",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn68view2\",\"lineno\":155}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn71view0\",\"pattern\":\"Purchases\"}); Total lines: 739",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn71view1\",\"pattern\":\"Purchases\"}); Total lines: 622"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "011",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "\"zAuctionHouse\" \"BuiltByBit\""
+          },
+          {
+            "q": "\"ShopGUI+\" \"BuiltByBit\""
+          },
+          {
+            "q": "\"AdvancedEnchantments\" \"BuiltByBit\" plugin"
+          },
+          {
+            "q": "\"EcoCrates\" \"BuiltByBit\""
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "012",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 161,
+            "ref_id": "turn71view1"
+          },
+          {
+            "id": 145,
+            "ref_id": "turn65view0"
+          },
+          {
+            "id": 147,
+            "ref_id": "turn65view0"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn72search0"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: open({\"ref_id\":\"turn72search0\",\"lineno\":null}); Total lines: 1099",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn71view1\",\"id\":161}); Total lines: 949",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn65view0\",\"id\":145}); Total lines: 717",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn65view0\",\"id\":147}); Total lines: 770"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "013",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn75view0"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn75view1"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn75view2"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn75view3"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn74search4"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: open({\"ref_id\":\"turn74search4\",\"lineno\":null}); Total lines: 855",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"turn75view0\",\"pattern\":\"Purchases\"}); Total lines: 1099",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn75view1\",\"pattern\":\"Purchases\"}); Total lines: 949",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn75view2\",\"pattern\":\"Purchases\"}); Total lines: 717",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn75view3\",\"pattern\":\"Purchases\"}); Total lines: 770"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "014",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "\"EcoCrates\" plugin buy"
+          },
+          {
+            "q": "\"Lands\" \"purchase\" \"plugin\" owner"
+          },
+          {
+            "q": "\"Stratos\" \"World Generator\" \"BuiltByBit\""
+          },
+          {
+            "q": "\"REDISCHAT\" plugin purchase BuiltByBit"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        "Dutch economy grew at a rate of 2.0%, the highest growth rate since 2007 (Source: Eurostat: http://ec.europa.eu/eurostat/tgm/table.do?tab=table&init=1&language=de&pcode=tec00115&plugin=1). In July 2016, the unemployment rate in the Netherlands stood at 6.0%, lower than the Eurozone average of 10.1% (Source: European Commission, http://ec.europa.eu/eurostat/statistics-explained/index.php/Unemployment_statistics, visited 29/09/2016). Domestic household consumption has grown since October 2014 and increased by 0.8% year-over-year in June 2016 (Source: Centraal Bureau voor de Statistiek, Netherlands, https://www.cbs.nl/en-gb/news/2016/33/dutch-consumer-spending-up). (https://ise-prodnr-eu-west-1-data-integration.s3-eu-west-1.amazonaws.com/legacy/Prospectus%20-%20Standalone_85785d15-9a8f-44a5-b70a-58f0ed06657a.pdf)"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "015",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn75view1"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn75view2"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn75view3"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn76view0"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn75view1\",\"pattern\":\"Buy a license now\"}); Total lines: 949",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn75view2\",\"pattern\":\"Buy a license now\"}); Total lines: 717",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn75view3\",\"pattern\":\"Buy a license now\"}); Total lines: 770",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"turn76view0\",\"pattern\":\"Buy a license now\"}); Total lines: 855"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "016",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "turn77search0"
+          },
+          {
+            "ref_id": "https://www.spigotmc.org/resources/lands.53313/"
+          },
+          {
+            "ref_id": "https://www.spigotmc.org/resources/economyshopgui-premium.104414/"
+          }
+        ],
+        "response_length": "long",
+        "search_query": [
+          {
+            "q": "\"EcoCrates\" \"Exanthiax\""
+          },
+          {
+            "q": "\"LiteFish\" \"BuiltByBit\" \"NekomaDev\""
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: last week; Content type: text/html; Source: open({\"ref_id\":\"turn77search0\",\"lineno\":null}); Total lines: 576",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://www.spigotmc.org/resources/lands.53313/\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://www.spigotmc.org/resources/economyshopgui-premium.104414/\",\"lineno\":null}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "017",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Supported software",
+            "ref_id": "turn79view0"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn79search7"
+          },
+          {
+            "ref_id": "turn79search5"
+          },
+          {
+            "ref_id": "https://builtbybit.com/resources/pterodactyl-plugin-installer.26817/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: 2 days ago; Content type: text/html; Source: open({\"ref_id\":\"turn79search7\",\"lineno\":null}); Total lines: 627",
+        " [wordlim: 200] Source: open({\"ref_id\":\"turn79search5\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://builtbybit.com/resources/pterodactyl-plugin-installer.26817/\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: last week; Content type: text/html; Source: find({\"ref_id\":\"turn79view0\",\"pattern\":\"Supported software\"}); Total lines: 576"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "018",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "\"Lands\" Angeschossen paid plugin Spigot 53313"
+          },
+          {
+            "q": "\"Pterodactyl Plugin Installer\" \"Mrxbox98\""
+          },
+          {
+            "q": "\"Admin GUI Premium\" \"BuiltByBit\""
+          },
+          {
+            "q": "\"LiteFish\" NekomaDev plugin"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "019",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "turn81search0"
+          },
+          {
+            "ref_id": "turn81search2"
+          },
+          {
+            "ref_id": "turn81search8"
+          }
+        ],
+        "response_length": "long",
+        "search_query": [
+          {
+            "q": "\"EcoShop\" \"BuiltByBit\""
+          },
+          {
+            "q": "\"Ultra Economy\" \"BuiltByBit\" \"TechsCode\""
+          },
+          {
+            "q": "\"zAuctionHouse\" Maxlego08 plugin buy"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: last month; Content type: text/html; Source: open({\"ref_id\":\"turn81search0\",\"lineno\":null}); Total lines: 758",
+        " [wordlim: 200] Crawled: 3 months ago; Content type: text/html; Source: open({\"ref_id\":\"turn81search2\",\"lineno\":null}); Redirected to URL: https://voxel.shop/product/2721/pterodactyl-plugin-installer; Total lines: 118",
+        " [wordlim: 200] Crawled: 4 days ago; Content type: text/html; Source: open({\"ref_id\":\"turn81search8\",\"lineno\":null}); Total lines: 506"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "020",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 154,
+            "ref_id": "turn67view1"
+          },
+          {
+            "id": 152,
+            "ref_id": "turn67view1"
+          }
+        ],
+        "find": [
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn82view0"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn80view0"
+          },
+          {
+            "pattern": "purchased",
+            "ref_id": "turn82view2"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn82search1"
+          },
+          {
+            "ref_id": "turn82search3"
+          },
+          {
+            "ref_id": "turn82search4"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: open({\"ref_id\":\"turn82search1\",\"lineno\":null}); Total lines: 627",
+        " [wordlim: 200] Crawled: last week; Content type: text/html; Source: open({\"ref_id\":\"turn82search3\",\"lineno\":null}); Total lines: 591",
+        " [wordlim: 200] Crawled: 3 months ago; Content type: text/html; Source: open({\"ref_id\":\"turn82search4\",\"lineno\":null}); Total lines: 145",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn67view1\",\"id\":154}); Total lines: 642",
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: click({\"ref_id\":\"turn67view1\",\"id\":152}); Total lines: 640",
+        " [wordlim: 200] Crawled: last month; Content type: text/html; Source: find({\"ref_id\":\"turn82view0\",\"pattern\":\"Purchases\"}); Total lines: 758",
+        " [wordlim: 200] Crawled: 2 days ago; Content type: text/html; Source: find({\"ref_id\":\"turn80view0\",\"pattern\":\"Purchases\"}); Total lines: 627",
+        " [wordlim: 200] Crawled: 4 days ago; Content type: text/html; Source: find({\"ref_id\":\"turn82view2\",\"pattern\":\"purchased\"}); Total lines: 506"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "021",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "\"ExcellentShop\" \"NightExpress\" plugin buy"
+          },
+          {
+            "q": "\"AquaticCrates\" \"Larkyy\" BuiltByBit"
+          },
+          {
+            "q": "\"CustomCrops\" \"paid\" \"free\" site:reddit.com/r/admincraft"
+          },
+          {
+            "q": "\"React\" \"LagAssist\" \"bought\" plugin"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "022",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn83view0"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn83view1"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn83view3"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn83view4"
+          },
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn82view0"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn84search10"
+          },
+          {
+            "ref_id": "turn84search0"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: open({\"ref_id\":\"turn84search10\",\"lineno\":null}); Total lines: 598",
+        " [wordlim: 200] Crawled: last month; Content type: text/html; Source: open({\"ref_id\":\"turn84search0\",\"lineno\":null}); Total lines: 467",
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: find({\"ref_id\":\"turn83view0\",\"pattern\":\"Buy a license now\"}); Total lines: 627",
+        " [wordlim: 200] Crawled: last week; Content type: text/html; Source: find({\"ref_id\":\"turn83view1\",\"pattern\":\"Buy a license now\"}); Total lines: 591",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn83view3\",\"pattern\":\"Buy a license now\"}); Total lines: 642",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn83view4\",\"pattern\":\"Buy a license now\"}); Total lines: 639",
+        " [wordlim: 200] Crawled: last month; Content type: text/html; Source: find({\"ref_id\":\"turn82view0\",\"pattern\":\"Buy a license now\"}); Total lines: 758"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "023",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://github.com/Xiao-MoMi/Custom-Crops"
+          },
+          {
+            "ref_id": "https://github.com/VolmitSoftware/React"
+          },
+          {
+            "ref_id": "https://github.com/VolmitSoftware/Iris"
+          }
+        ],
+        "response_length": "short"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Xiao-MoMi/Custom-Crops\",\"lineno\":null}); Total lines: 304",
+        " [wordlim: 200] Crawled: 2 weeks ago; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/VolmitSoftware/React\",\"lineno\":null}); Total lines: 227",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/VolmitSoftware/Iris\",\"lineno\":null}); Total lines: 421"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "024",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Supported software",
+            "ref_id": "turn83view3"
+          },
+          {
+            "pattern": "Purchases",
+            "ref_id": "turn83view4"
+          },
+          {
+            "pattern": "Supported software",
+            "ref_id": "turn85view0"
+          },
+          {
+            "pattern": "AquaticCrates",
+            "ref_id": "turn85view1"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "https://www.reddit.com/r/admincraft/comments/1wi7m0m/crossserver_chat_global_chat_plugin/"
+          },
+          {
+            "ref_id": "https://github.com/EssentialsX/Essentials"
+          },
+          {
+            "ref_id": "https://github.com/lucko/spark"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: 5 days ago; Content type: text/html; Source: open({\"ref_id\":\"https://www.reddit.com/r/admincraft/comments/1wi7m0m/crossserver_chat_global_chat_plugin/\",\"lineno\":null}); Total lines: 422",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/EssentialsX/Essentials\",\"lineno\":null}); Total lines: 318",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/lucko/spark\",\"lineno\":null}); Total lines: 292",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn83view3\",\"pattern\":\"Supported software\"}); Total lines: 642",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn83view4\",\"pattern\":\"Purchases\"}); Total lines: 639",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"turn85view0\",\"pattern\":\"Supported software\"}); Total lines: 598",
+        " [wordlim: 200] Crawled: last month; Content type: text/html; Source: find({\"ref_id\":\"turn85view1\",\"pattern\":\"AquaticCrates\"}); Total lines: 467"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "025",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://github.com/Gypopo/EconomyShopGUI"
+          },
+          {
+            "ref_id": "https://github.com/Th0rgal/eco"
+          },
+          {
+            "ref_id": "https://github.com/PolyhedralDev/Terra"
+          },
+          {
+            "ref_id": "https://github.com/marcelo-mason/SimpleClans"
+          },
+          {
+            "ref_id": "https://github.com/Zrips/Jobs"
+          },
+          {
+            "ref_id": "https://github.com/NightExpress/ExcellentEnchants"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://github.com/Gypopo/EconomyShopGUI\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://github.com/Th0rgal/eco\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/PolyhedralDev/Terra\",\"lineno\":null}); Total lines: 283",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/marcelo-mason/SimpleClans\",\"lineno\":null}); Total lines: 212",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Zrips/Jobs\",\"lineno\":null}); Total lines: 327",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://github.com/NightExpress/ExcellentEnchants\",\"lineno\":null}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "026",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 101,
+            "ref_id": "turn85view1"
+          }
+        ],
+        "find": [
+          {
+            "pattern": "buying",
+            "ref_id": "turn87view0"
+          },
+          {
+            "pattern": "License",
+            "ref_id": "turn87view1"
+          },
+          {
+            "pattern": "License",
+            "ref_id": "turn87view2"
+          },
+          {
+            "pattern": "SimpleClans",
+            "ref_id": "turn88view3"
+          },
+          {
+            "pattern": "Jobs Reborn",
+            "ref_id": "turn88view4"
+          },
+          {
+            "pattern": "About",
+            "ref_id": "turn88view5"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: click({\"ref_id\":\"turn85view1\",\"id\":101}); Total lines: 747",
+        " [wordlim: 200] Crawled: 5 days ago; Content type: text/html; Source: find({\"ref_id\":\"turn87view0\",\"pattern\":\"buying\"}); Total lines: 422",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn87view1\",\"pattern\":\"License\"}); Total lines: 318",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn87view2\",\"pattern\":\"License\"}); Total lines: 292",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn88view3\",\"pattern\":\"SimpleClans\"}); Total lines: 212",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn88view4\",\"pattern\":\"Jobs Reborn\"}); Total lines: 327",
+        " [wordlim: 200] Source: find({\"ref_id\":\"turn88view5\",\"pattern\":\"About\"}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "027",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://wiki.gpplugins.com/economyshopgui"
+          },
+          {
+            "ref_id": "https://docs.papermc.io/paper/reference/global-configuration/"
+          },
+          {
+            "ref_id": "https://nightexpressdev.com/excellentenchants/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/plain; Source: open({\"ref_id\":\"https://wiki.gpplugins.com/economyshopgui\",\"lineno\":null}); Total lines: 83",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://docs.papermc.io/paper/reference/global-configuration/\",\"lineno\":null}); Total lines: 537",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://nightexpressdev.com/excellentenchants/\",\"lineno\":null}); Total lines: 79"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "028",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "\"HuskSync\" \"BuiltByBit\" William278"
+          },
+          {
+            "q": "\"mcMMO\" nossr50 official purchase"
+          },
+          {
+            "q": "\"MMOCore\" \"Indyuce\" plugin shop"
+          },
+          {
+            "q": "\"CarbonSpigot\" Refine official"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "029",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 79,
+            "ref_id": "turn89view4"
+          }
+        ],
+        "find": [
+          {
+            "pattern": "Buy a license now",
+            "ref_id": "turn89view0"
+          },
+          {
+            "pattern": "License",
+            "ref_id": "turn88view5"
+          }
+        ],
+        "open": [
+          {
+            "lineno": 190,
+            "ref_id": "https://github.com/Xiao-MoMi/Custom-Crops"
+          },
+          {
+            "lineno": 180,
+            "ref_id": "https://github.com/PolyhedralDev/Terra"
+          },
+          {
+            "lineno": 350,
+            "ref_id": "turn90view1"
+          },
+          {
+            "lineno": 90,
+            "ref_id": "turn90view2"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Xiao-MoMi/Custom-Crops\",\"lineno\":190}); Total lines: 304",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/PolyhedralDev/Terra\",\"lineno\":180}); Total lines: 283",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn90view1\",\"lineno\":350}); Total lines: 537",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn90view2\",\"lineno\":90}); Total lines: 79",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn89view4\",\"id\":79}); Total lines: 282",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn89view0\",\"pattern\":\"Buy a license now\"}); Total lines: 746",
+        " [wordlim: 200] Source: find({\"ref_id\":\"turn88view5\",\"pattern\":\"License\"}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "030",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 100,
+            "ref_id": "turn89view0"
+          },
+          {
+            "id": 183,
+            "ref_id": "turn75view2"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "turn91search2"
+          },
+          {
+            "ref_id": "turn91search5"
+          }
+        ],
+        "response_length": "long",
+        "search_query": [
+          {
+            "q": "\"McMMO\" \"SpigotMC\" \"nossr50\" \"purchase\""
+          },
+          {
+            "q": "\"MMOCore\" \"Phoenix\" \"shop\""
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: open({\"ref_id\":\"turn91search2\",\"lineno\":null}); Total lines: 669",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn91search5\",\"lineno\":null}); Total lines: 120",
+        " [wordlim: 200] Crawled: 1.3 years ago; Content type: text/html; Source: click({\"ref_id\":\"turn89view0\",\"id\":100}); Total lines: 657",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn75view2\",\"id\":183}); Total lines: 1172"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "031",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": null,
+      "request_payload_retained": false,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://mcmmo.org/\",\"lineno\":null}); Total lines: 87",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"turn93search1\",\"lineno\":null}); Total lines: 519",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://docs.refinedev.org/carbonspigot\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"turn93view0\",\"pattern\":\"Buy a license now\"}); Total lines: 669"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "032",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "response_length": "short",
+        "search_query": [
+          {
+            "q": "Lands Angeschossen official installation plugin jar"
+          },
+          {
+            "q": "HuskSync free open source alternative plugin sync inventories"
+          },
+          {
+            "q": "CustomNameplates installation Paper jar official"
+          },
+          {
+            "q": "CustomFishing installation plugin jar mo-mi"
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "033",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 101,
+            "ref_id": "turn92view5"
+          }
+        ],
+        "find": [
+          {
+            "pattern": "Free",
+            "ref_id": "turn92view4"
+          },
+          {
+            "pattern": "Sponge",
+            "ref_id": "turn92view5"
+          },
+          {
+            "pattern": "Version",
+            "ref_id": "turn94view0"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "https://www.advancedplugins.net/item/AdvancedJobs.187/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: 4 days ago; Content type: text/html; Source: open({\"ref_id\":\"https://www.advancedplugins.net/item/AdvancedJobs.187/\",\"lineno\":null}); Total lines: 217",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn92view5\",\"id\":101}); Total lines: 600",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn92view4\",\"pattern\":\"Free\"}); Total lines: 282",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn92view5\",\"pattern\":\"Sponge\"}); Total lines: 746",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"turn94view0\",\"pattern\":\"Version\"}); Total lines: 87"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "034",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://mcmmo.org/"
+          },
+          {
+            "ref_id": "https://github.com/WiIIiam278/HuskSync"
+          },
+          {
+            "ref_id": "https://mo-mi.gitbook.io/xiaomomi-plugins/customfishing"
+          },
+          {
+            "ref_id": "https://github.com/Xiao-MoMi/Custom-Nameplates"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://mcmmo.org/\",\"lineno\":null}); Total lines: 87",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/WiIIiam278/HuskSync\",\"lineno\":null}); Total lines: 308",
+        " [wordlim: 200] Crawled: today; Content type: text/plain; Source: open({\"ref_id\":\"https://mo-mi.gitbook.io/xiaomomi-plugins/customfishing\",\"lineno\":null}); Total lines: 58",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Xiao-MoMi/Custom-Nameplates\",\"lineno\":null}); Total lines: 247"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "035",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "find": [
+          {
+            "pattern": "plugin",
+            "ref_id": "https://builtbybit.com/resources/customnameplates.36359/"
+          },
+          {
+            "pattern": "plugin",
+            "ref_id": "https://builtbybit.com/resources/craftengine.82674/"
+          },
+          {
+            "pattern": "Buy a license",
+            "ref_id": "https://builtbybit.com/resources/customfishing.36361/"
+          },
+          {
+            "pattern": "Buy a license",
+            "ref_id": "https://builtbybit.com/resources/cosmeticscore.25197/"
+          },
+          {
+            "pattern": "Buy a license",
+            "ref_id": "https://builtbybit.com/resources/iris-dimension-engine.56258/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/customnameplates.36359/\",\"pattern\":\"plugin\"}); Total lines: 607",
+        "L191:     * Open Source:",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/craftengine.82674/\",\"pattern\":\"plugin\"}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/customfishing.36361/\",\"pattern\":\"Buy a license\"}); Total lines: 656",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/cosmeticscore.25197/\",\"pattern\":\"Buy a license\"}); Total lines: 622",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/iris-dimension-engine.56258/\",\"pattern\":\"Buy a license\"}); Total lines: 739"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "036",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://craftengine.momirealms.net/installation.html"
+          },
+          {
+            "ref_id": "https://github.com/NEZNAMY/TAB"
+          },
+          {
+            "ref_id": "https://nightexpressdev.com/excellentcrates/"
+          },
+          {
+            "ref_id": "https://github.com/Archy-X/AuraSkills"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://craftengine.momirealms.net/installation.html\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/NEZNAMY/TAB\",\"lineno\":null}); Total lines: 274",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://nightexpressdev.com/excellentcrates/\",\"lineno\":null}); Total lines: 68",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Archy-X/AuraSkills\",\"lineno\":null}); Total lines: 321"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "037",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://github.com/Xiao-MoMi/CraftEngine"
+          },
+          {
+            "ref_id": "https://github.com/Xiao-MoMi/Custom-Fishing"
+          },
+          {
+            "lineno": 185,
+            "ref_id": "https://github.com/Archy-X/AuraSkills"
+          },
+          {
+            "lineno": 180,
+            "ref_id": "https://github.com/NightExpress/ExcellentEnchants"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://github.com/Xiao-MoMi/CraftEngine\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Xiao-MoMi/Custom-Fishing\",\"lineno\":null}); Total lines: 289",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Archy-X/AuraSkills\",\"lineno\":185}); Total lines: 321",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://github.com/NightExpress/ExcellentEnchants\",\"lineno\":180}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "038",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://voxel.shop/resource/6271"
+          },
+          {
+            "lineno": 150,
+            "ref_id": "https://builtbybit.com/resources/craftengine.82674/"
+          },
+          {
+            "lineno": 200,
+            "ref_id": "https://github.com/Archy-X/AuraSkills"
+          },
+          {
+            "lineno": 195,
+            "ref_id": "https://github.com/NightExpress/ExcellentEnchants"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://voxel.shop/resource/6271\",\"lineno\":null}); Total lines: 1",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://builtbybit.com/resources/craftengine.82674/\",\"lineno\":150}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/Archy-X/AuraSkills\",\"lineno\":200}); Total lines: 321",
+        " [wordlim: 200] Source: open({\"ref_id\":\"https://github.com/NightExpress/ExcellentEnchants\",\"lineno\":195}); Total lines: 1"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "039",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "click": [
+          {
+            "id": 105,
+            "ref_id": "turn101view1"
+          },
+          {
+            "id": 103,
+            "ref_id": "turn101view1"
+          }
+        ],
+        "open": [
+          {
+            "ref_id": "https://nightexpressdev.com/excellentenchants/"
+          },
+          {
+            "lineno": 185,
+            "ref_id": "https://github.com/VolmitSoftware/React"
+          },
+          {
+            "lineno": 185,
+            "ref_id": "https://github.com/VolmitSoftware/Iris"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://nightexpressdev.com/excellentenchants/\",\"lineno\":null}); Total lines: 79",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/VolmitSoftware/React\",\"lineno\":185}); Total lines: 223",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://github.com/VolmitSoftware/Iris\",\"lineno\":185}); Total lines: 421",
+        " [wordlim: 200] Source: click({\"ref_id\":\"turn101view1\",\"id\":105}); Total lines: 1",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: click({\"ref_id\":\"turn101view1\",\"id\":103}); Total lines: 73"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "040",
+      "phase": "Fresh targeted public research after frozen Stage A; substitutes consulted after observed commercial signal.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://xiao-momi.github.io/craft-engine-wiki/"
+          },
+          {
+            "ref_id": "https://nightexpressdev.com/excellentenchants/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://xiao-momi.github.io/craft-engine-wiki/\",\"lineno\":null}); Total lines: 73",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://nightexpressdev.com/excellentenchants/\",\"lineno\":null}); Total lines: 79"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "041",
+      "phase": "Fresh paid licensing/contradiction verification; no concepts.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ultimate-clans.40390/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/exploitfixer-anti-crash-dupe-plugin.26463/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/lpx-antipacketexploit.15709/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ecoenchants.23935/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ecocrates.23944/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/husksync-cross-server-data-syncing.34956/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ultimate-clans.40390/\",\"pattern\":\"Support duration\"}); Total lines: 1099",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/exploitfixer-anti-crash-dupe-plugin.26463/\",\"pattern\":\"Support duration\"}); Total lines: 949",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/lpx-antipacketexploit.15709/\",\"pattern\":\"Support duration\"}); Total lines: 717",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ecoenchants.23935/\",\"pattern\":\"Support duration\"}); Total lines: 653",
+        " [wordlim: 200] Crawled: 2 days ago; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ecocrates.23944/\",\"pattern\":\"Support duration\"}); Total lines: 627",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/husksync-cross-server-data-syncing.34956/\",\"pattern\":\"Support duration\"}); Total lines: 669"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "042",
+      "phase": "Fresh paid licensing/contradiction verification; no concepts.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/customcrops.36363/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/customfishing.36361/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/customnameplates.36359/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/craftengine.82674/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/react-smart-server-performance.56257/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/iris-dimension-engine.56258/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/customcrops.36363/\",\"pattern\":\"Support duration\"}); Total lines: 658",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/customfishing.36361/\",\"pattern\":\"Support duration\"}); Total lines: 656",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/customnameplates.36359/\",\"pattern\":\"Support duration\"}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/craftengine.82674/\",\"pattern\":\"Support duration\"}); Total lines: 607",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/react-smart-server-performance.56257/\",\"pattern\":\"Support duration\"}); Total lines: 749",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/iris-dimension-engine.56258/\",\"pattern\":\"Support duration\"}); Total lines: 739"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "043",
+      "phase": "Fresh paid licensing/contradiction verification; no concepts.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/cosmeticscore.25197/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/advancedenchantments-450-enchantments.29443/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/redischat-a-cross-server-chat-plugin.60883/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/admin-gui-premium.16747/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ecoshop.26251/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ultra-economy.19033/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/cosmeticscore.25197/\",\"pattern\":\"Support duration\"}); Total lines: 622",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/advancedenchantments-450-enchantments.29443/\",\"pattern\":\"Support duration\"}); Total lines: 855",
+        " [wordlim: 200] Crawled: last week; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/redischat-a-cross-server-chat-plugin.60883/\",\"pattern\":\"Support duration\"}); Total lines: 576",
+        " [wordlim: 200] Crawled: last month; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/admin-gui-premium.16747/\",\"pattern\":\"Support duration\"}); Total lines: 758",
+        " [wordlim: 200] Crawled: 3 weeks ago; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ecoshop.26251/\",\"pattern\":\"Support duration\"}); Total lines: 627",
+        " [wordlim: 200] Crawled: last week; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ultra-economy.19033/\",\"pattern\":\"Support duration\"}); Total lines: 591"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "044",
+      "phase": "Fresh paid licensing/contradiction verification; no concepts.",
+      "request": {
+        "find": [
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ecojobs.25150/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/ecoskills.23942/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/excellentshop.46692/"
+          },
+          {
+            "pattern": "Support duration",
+            "ref_id": "https://builtbybit.com/resources/aquaticcrates-new-era-of-crates.25314/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ecojobs.25150/\",\"pattern\":\"Support duration\"}); Total lines: 642",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/ecoskills.23942/\",\"pattern\":\"Support duration\"}); Total lines: 639",
+        " [wordlim: 200] Crawled: yesterday; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/excellentshop.46692/\",\"pattern\":\"Support duration\"}); Total lines: 598",
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: find({\"ref_id\":\"https://builtbybit.com/resources/aquaticcrates-new-era-of-crates.25314/\",\"pattern\":\"Support duration\"}); Total lines: 746"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "045",
+      "phase": "Fresh paid licensing/contradiction verification; no concepts.",
+      "request": {
+        "open": [
+          {
+            "lineno": 415,
+            "ref_id": "https://builtbybit.com/resources/aquaticcrates-new-era-of-crates.25314/"
+          }
+        ],
+        "response_length": "short"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://builtbybit.com/resources/aquaticcrates-new-era-of-crates.25314/\",\"lineno\":415}); Total lines: 746"
+      ],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "046",
+      "phase": "Post-payment search for commission behavior, free-to-paid migration and counterevidence; unattributed services parked.",
+      "request": {
+        "response_length": "long",
+        "search_query": [
+          {
+            "q": "site.reddit.com/r/admincraft \"commission\" \"plugin\" \"paid\""
+          },
+          {
+            "q": "site.reddit.com/r/admincraft \"paid plugins\" \"regret\""
+          },
+          {
+            "q": "site.reddit.com/r/admincraft \"premium plugins\" \"free\" \"buy\""
+          }
+        ]
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [],
+      "retrieval_date": "2026-10-03"
+    },
+    {
+      "batch": "047",
+      "phase": "Post-payment search for commission behavior, free-to-paid migration and counterevidence; unattributed services parked.",
+      "request": {
+        "open": [
+          {
+            "ref_id": "https://www.reddit.com/r/admincraft/comments/zmvk7a"
+          },
+          {
+            "ref_id": "https://www.reddit.com/r/admincraft/comments/1vobvhi/can_developing_minecraft_pluginsmods_really/"
+          }
+        ],
+        "response_length": "long"
+      },
+      "request_payload_retained": true,
+      "result_source_headers": [
+        " [wordlim: 200] Crawled: today; Content type: text/html; Source: open({\"ref_id\":\"https://www.reddit.com/r/admincraft/comments/zmvk7a\",\"lineno\":null}); Redirected to URL: https://www.reddit.com/r/admincraft/comments/zmvk7a/is_premium_plugins_worth_it/; Total lines: 445",
+        " [wordlim: 200] Crawled: 2 weeks ago; Content type: text/html; Source: open({\"ref_id\":\"https://www.reddit.com/r/admincraft/comments/1vobvhi/can_developing_minecraft_pluginsmods_really/\",\"lineno\":null}); Total lines: 610"
+      ],
+      "retrieval_date": "2026-10-03"
+    }
+  ],
+  "schema_version": "yee143-demand-first-v0.1",
+  "sources": [
+    {
+      "canonical_identity": "voxel:2625",
+      "canonical_url": "https://builtbybit.com/resources/customcrops.36363/",
+      "contradictory_evidence": "Free-granted license review reports originally buying on Voxel; bundles/transfers/grants make distinct cash-buyer meaning unknown.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Paper crop plugin; official repository identifies Paper server runtime; listing describes custom growing cycles and required item frameworks.",
+        "price_display_amount": 11.98,
+        "public_purchase_counter": 493,
+        "software_claim": "Paper",
+        "title": "CustomCrops",
+        "updated_display": "2026-09-29",
+        "vendor": "XiaoMoMi"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_2625",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:2723",
+      "canonical_url": "https://builtbybit.com/resources/customfishing.36361/",
+      "contradictory_evidence": "Review complains of AuraSkills/custom-loot integration and requests refund; official integration documentation lists AuraSkills. No runtime adjudication.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Official repository explicitly identifies a Paper fishing plugin; marketplace describes fishing minigames and loot.",
+        "price_display_amount": 11.98,
+        "public_purchase_counter": 431,
+        "software_claim": "Paper",
+        "title": "CustomFishing",
+        "updated_display": "2026-09-29",
+        "vendor": "XiaoMoMi"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_2723",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:2543",
+      "canonical_url": "https://builtbybit.com/resources/customnameplates.36359/",
+      "contradictory_evidence": "Review explicitly identifies a free-granted license; reviews/licenses are not automatically cash transactions.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly calls this a plugin recreating a discontinued Spigot plugin; describes server player-name presentation.",
+        "price_display_amount": 11.98,
+        "public_purchase_counter": 400,
+        "software_claim": "Paper",
+        "title": "CustomNameplates",
+        "updated_display": "2026-09-27",
+        "vendor": "XiaoMoMi"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_2543",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:7624",
+      "canonical_url": "https://builtbybit.com/resources/craftengine.82674/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Vendor docs and listing establish server-side runtime, vanilla clients, packet handling and Bukkit plugin comparisons; generated resource packs are outputs, not product form.",
+        "price_display_amount": 19.98,
+        "public_purchase_counter": 64,
+        "software_claim": "Paper/Folia/Purpur",
+        "title": "CraftEngine",
+        "updated_display": "2026-09-28",
+        "vendor": "XiaoMoMi"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_7624",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:490",
+      "canonical_url": "https://builtbybit.com/resources/ecoenchants.23935/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing describes registered server enchantments, plugin configuration and libreforge integration.",
+        "price_display_amount": 18.49,
+        "public_purchase_counter": 147,
+        "software_claim": "Spigot/Paper",
+        "title": "EcoEnchants",
+        "updated_display": "2026-09-27",
+        "vendor": "Exanthiax"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_490",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:4736",
+      "canonical_url": "https://builtbybit.com/resources/react-smart-server-performance.56257/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Official repository documents building the shaded plugin jar; listing describes automated Minecraft server performance management.",
+        "price_display_amount": 9.99,
+        "public_purchase_counter": 34,
+        "software_claim": "Spigot/Paper/Folia/Purpur",
+        "title": "React",
+        "updated_display": "2026-09-30",
+        "vendor": "VolmitSoftware"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_4736",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:3623",
+      "canonical_url": "https://builtbybit.com/resources/iris-dimension-engine.56258/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Official repository explicitly separates Bukkit-family plugin jars installed in plugins/ from Fabric/Forge/NeoForge mods. Only plugin edition is eligible.",
+        "price_display_amount": 15.99,
+        "public_purchase_counter": 129,
+        "software_claim": "Bukkit-family plugin edition only",
+        "title": "Iris",
+        "updated_display": "2026-09-30",
+        "vendor": "VolmitSoftware"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_3623",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:2879",
+      "canonical_url": "https://builtbybit.com/resources/cosmeticscore.25197/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing describes Minecraft server cosmetics runtime and plugin integration; cosmetic models are input assets, not the product being admitted.",
+        "price_display_amount": 13.99,
+        "public_purchase_counter": 556,
+        "software_claim": "Spigot/Paper",
+        "title": "CosmeticsCore",
+        "updated_display": "2026-09-10",
+        "vendor": "LoneDev"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_2879",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:1162",
+      "canonical_url": "https://builtbybit.com/resources/ultimate-clans.40390/",
+      "contradictory_evidence": "Historical buyer reports a four-month license and support/configuration difficulties; current BuiltByBit displays Lifetime support. Channel/date/plan differences unresolved.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly markets a Minecraft clan plugin with server clan persistence and API. UlrichBR/TribeCraft listing identity retained.",
+        "price_display_amount": 15,
+        "public_purchase_counter": 140,
+        "software_claim": "Spigot/Paper/Folia/Purpur",
+        "title": "UltimateClans",
+        "updated_display": "2026-09-20",
+        "vendor": "UlrichBR"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_1162",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:3327",
+      "canonical_url": "https://builtbybit.com/resources/exploitfixer-anti-crash-dupe-plugin.26463/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly identifies an anti-crash and duplication prevention server plugin.",
+        "price_display_amount": 11.19,
+        "public_purchase_counter": 3276,
+        "software_claim": "Bukkit/Spigot/Paper/Folia",
+        "title": "ExploitFixer",
+        "updated_display": "2026-10-01",
+        "vendor": "LinsaFTW"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_3327",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:708",
+      "canonical_url": "https://builtbybit.com/resources/lpx-antipacketexploit.15709/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly identifies a server plugin protecting against packet crash exploits; native LPX-MORTAL naming alias retained.",
+        "price_display_amount": 19.97,
+        "public_purchase_counter": 4417,
+        "software_claim": "Paper/Folia/Purpur",
+        "title": "LPX",
+        "updated_display": "2026-09-24",
+        "vendor": "Ytnoos"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_708",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "builtbybit:10839",
+      "canonical_url": "https://builtbybit.com/resources/itemsadder.10839/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "exclusion_reason": "Native voxel:1851 is OUT_OF_SCOPE. Fresh primary description contradicts gate; parked, no recovery or external-alias bypass.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing identifies server plugin custom-content runtime with automatic resource-pack generation; distinct from configurations sold for ItemsAdder.",
+        "price_display_amount": 24.99,
+        "public_purchase_counter": 3560,
+        "software_claim": "Spigot/Paper",
+        "title": "ItemsAdder",
+        "updated_display": "2026-08-21",
+        "vendor": "LoneDev"
+      },
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_builtbybit_10839",
+      "source_owner": "BuiltByBit marketplace and product vendor"
+    },
+    {
+      "canonical_identity": "voxel:634",
+      "canonical_url": "https://builtbybit.com/resources/advancedenchantments-450-enchantments.29443/",
+      "contradictory_evidence": "Buyer review reports mismatched vendor versus marketplace versions and weeks without support response; functionality praised alongside support complaint.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly describes a custom-enchantments server plugin.",
+        "price_display_amount": 19.99,
+        "public_purchase_counter": 433,
+        "software_claim": "Spigot/Paper",
+        "title": "AdvancedEnchantments",
+        "updated_display": "2026-05-22",
+        "vendor": "AdvancedPlugins"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_634",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:4471",
+      "canonical_url": "https://builtbybit.com/resources/redischat-a-cross-server-chat-plugin.60883/",
+      "crawl_cache_note": "Public-web source crawl last week; update 2025-08-07 is stale.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly identifies a cross-server Minecraft chat plugin; identity matches native vendor and title.",
+        "price_display_amount": 13.97,
+        "public_purchase_counter": 7,
+        "software_claim": "Bukkit/Spigot/Paper",
+        "title": "RedisChat",
+        "updated_display": "2025-08-07",
+        "vendor": "Emibergo02"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_4471",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:2149",
+      "canonical_url": "https://builtbybit.com/resources/ecocrates.23944/",
+      "contradictory_evidence": "Buyer regrets paying and reports marketplace update/support delays; another reports good experience. Current update date does not prove support quality.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing identifies server crate plugin with reward operation; native confirmed membership retained.",
+        "price_display_amount": 19.99,
+        "public_purchase_counter": 48,
+        "software_claim": "Spigot/Paper",
+        "title": "EcoCrates",
+        "updated_display": "2026-09-27",
+        "vendor": "Exanthiax"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_2149",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:49",
+      "canonical_url": "https://builtbybit.com/resources/admin-gui-premium.16747/",
+      "crawl_cache_note": "Public-web source crawl last month; 46 and price are displayed observations, not real-time.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly describes a plugin to manage a Minecraft server through an administrative GUI.",
+        "price_display_amount": 13.49,
+        "public_purchase_counter": 46,
+        "software_claim": "Bukkit/Spigot/Paper/Bungee",
+        "title": "AdminGUI Premium",
+        "updated_display": "2026-05-15",
+        "vendor": "BlackRabbit3"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_49",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:3177",
+      "canonical_url": "https://builtbybit.com/resources/ecoshop.26251/",
+      "contradictory_evidence": "Discovery snippet differs from opened body. Opened 44 retained; snippet ignored. Tool crawl cached three weeks.",
+      "crawl_cache_note": "Public-web source crawl 3 weeks ago; opened body retained.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing identifies Minecraft server shop plugin with configuration-driven buying and selling.",
+        "price_display_amount": 17.49,
+        "public_purchase_counter": 44,
+        "software_claim": "Spigot/Paper/Purpur",
+        "title": "EcoShop",
+        "updated_display": "2026-08-29",
+        "vendor": "Exanthiax"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_3177",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:1206",
+      "canonical_url": "https://builtbybit.com/resources/ultra-economy.19033/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly describes a server economy plugin for currencies, banks and balances.",
+        "price_display_amount": 14.98,
+        "public_purchase_counter": 37,
+        "software_claim": "Bukkit/Spigot/Bungee",
+        "title": "UltraEconomy",
+        "updated_display": "2026-02-01",
+        "vendor": "TechsCode"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_1206",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:2857",
+      "canonical_url": "https://builtbybit.com/resources/ecojobs.25150/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly describes a server jobs plugin with wages and job levels.",
+        "price_display_amount": 15.49,
+        "public_purchase_counter": 76,
+        "software_claim": "Paper",
+        "title": "EcoJobs",
+        "updated_display": "2026-09-27",
+        "vendor": "Exanthiax"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_2857",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:1351",
+      "canonical_url": "https://builtbybit.com/resources/ecoskills.23942/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Listing explicitly describes an RPG skills/progression server plugin.",
+        "price_display_amount": 19.99,
+        "public_purchase_counter": 102,
+        "software_claim": "Spigot/Paper",
+        "title": "EcoSkills",
+        "updated_display": "2026-09-27",
+        "vendor": "Exanthiax"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_1351",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "voxel:1634",
+      "canonical_url": "https://builtbybit.com/resources/husksync-cross-server-data-syncing.34956/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Official repository explicitly directs the plugin jar to each server's plugins/ directory; Fabric mod edition excluded.",
+        "price_display_amount": 14.99,
+        "public_purchase_counter": 245,
+        "software_claim": "Spigot/Paper plugin edition only",
+        "title": "HuskSync",
+        "updated_display": "2026-08-15",
+        "vendor": "William278"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; displayed offer only. Purchase/access/renewal details beyond displayed block unresolved.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_1634",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "builtbybit:46692",
+      "canonical_url": "https://builtbybit.com/resources/excellentshop.46692/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Fresh listing identifies a GUI/chest-shop server plugin. NOT voxel:6271, a separately authored configuration.",
+        "price_display_amount": 14.99,
+        "public_purchase_counter": 161,
+        "software_claim": "Spigot/Paper",
+        "title": "ExcellentShop",
+        "updated_display": "2026-10-01",
+        "vendor": "NightExpress"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; offer only.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_builtbybit_46692",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "Lifetime"
+    },
+    {
+      "canonical_identity": "builtbybit:25314",
+      "canonical_url": "https://builtbybit.com/resources/aquaticcrates-new-era-of-crates.25314/",
+      "contradictory_evidence": "Recent review alleges abandonment/nonworking release; another reports paying $20, trouble finding a working version and missing intended functionality. Older reviews praise support/updates. Neither side establishes prevalence; last displayed update Dec 4 2025.",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": "Purchases",
+        "currency_display": "$",
+        "positive_product_form_evidence": "Fresh listing identifies a server crate plugin, matching LARKYY product mentioned by the buyer.",
+        "price_display_amount": 19.97,
+        "public_purchase_counter": 194,
+        "software_claim": "Spigot/Paper",
+        "title": "AquaticCrates",
+        "updated_display": "2025-12-04",
+        "vendor": "LARKYY"
+      },
+      "license_display": "Standard EULA; own projects with attribution",
+      "license_verification": "Opened main licensing block on 2026-10-03; offer only.",
+      "limitations": "Purchase counter's unique-buyer, refund, free-grant, cross-market migration and time-window semantics unknown; not revenue or unique customers. Price is an offered license amount. Software is vendor-claimed, untested.",
+      "locator": "Main product body; Buy a license now; main Purchases/Updated blocks (recommended products excluded).",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_builtbybit_25314",
+      "source_owner": "BuiltByBit marketplace and product vendor",
+      "support_display": "Standard; download, updates and creator support",
+      "support_duration_display": "1 year"
+    },
+    {
+      "canonical_identity": "voxel:727",
+      "canonical_url": "https://mcmmo.org/",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": null,
+        "currency_display": null,
+        "positive_product_form_evidence": "Official mcmmo.org explicitly identifies an RPG Spigot/Paper plugin and links its Voxel purchase route.",
+        "price_display_amount": null,
+        "public_purchase_counter": null,
+        "software_claim": "Spigot/Paper",
+        "title": "mcMMO",
+        "updated_display": null,
+        "vendor": "nossr50"
+      },
+      "limitations": "No public paid counter verified; current numeric price and maintenance date unknown.",
+      "locator": "Product description and purchase/installation links",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_727",
+      "source_owner": "nossr50"
+    },
+    {
+      "canonical_identity": "voxel:908",
+      "canonical_url": "https://wiki.gpplugins.com/economyshopgui",
+      "crawl_cache_note": "Opened through public-web tool; cache age varies. Retrieval is not a real-time transaction audit.",
+      "facts": {
+        "counter_label": null,
+        "currency_display": null,
+        "positive_product_form_evidence": "Official GPPlugins wiki describes the server shop plugin and links its distinct premium listing; premium flags remain offer-only.",
+        "price_display_amount": null,
+        "public_purchase_counter": null,
+        "software_claim": "Spigot/Paper",
+        "title": "EconomyShopGUI Premium",
+        "updated_display": null,
+        "vendor": "Gypopo"
+      },
+      "limitations": "No public paid counter verified; current numeric price and maintenance date unknown.",
+      "locator": "Product description and purchase/installation links",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "product_voxel_908",
+      "source_owner": "Gypopo"
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://www.reddit.com/r/admincraft/comments/1htq0y7/top_premium_plugins_purchased/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "buyer_diary",
+      "source_owner": "Independent operator; one correlated buyer across products",
+      "source_published_period": "2025-01",
+      "summary": "Self-reported purchases: CustomCrops and CustomFishing; Fishing selected for action-point mechanics with documentation complaints. ExcellentShop replaced ShopGUI+ for daily limits and an in-game editor. AquaticCrates replaced SpecializedCrates for custom-model workflow. RedisChat replaced difficult ChatControl setup. AdvancedEnchantments purchased for depth and configurability. One dated buyer account, no receipts or representativeness."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://www.reddit.com/r/admincraft/comments/1wi7m0m/crossserver_chat_global_chat_plugin/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "buyer_chat_intent",
+      "source_owner": "Independent community commenter",
+      "source_published_period": "2026, exact timestamp unresolved",
+      "summary": "Tentatively considering buying VelocityControl and ChatControl after Carbon problems. Current intent, no completed payment or amount verified."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://www.spigotmc.org/members/nossr50.480136/?page=2",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "buyer_mcmmo",
+      "source_owner": "Independent forum actors captainnnako/captainnako (spelling unresolved) and goatman555",
+      "source_published_period": "historic",
+      "summary": "Two explicit buyer statements on mcMMO author page; one lacks purchase access after buying, another calls mcMMO their first bought plugin. Historic self-report, no receipt, timestamps not normalized; aggregate as one conservative corroboration channel."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/Xiao-MoMi/Custom-Crops",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_crops",
+      "source_owner": "XiaoMoMi",
+      "source_published_period": null,
+      "summary": "Paper server plugin; GPL-3.0 and local build instructions support self-compilation context."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/Xiao-MoMi/Custom-Fishing",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_fishing",
+      "source_owner": "XiaoMoMi",
+      "source_published_period": null,
+      "summary": "Paper fishing plugin; GPL-3.0, JDK/build instructions and marketplace links establish server form and self-compilation context."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/WiIIiam278/HuskSync",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_husksync",
+      "source_owner": "William278",
+      "source_published_period": null,
+      "summary": "Apache-2.0 source and build instructions. Paid official binaries and support require a verified license. Paper plugin edition only; separate Fabric edition excluded. Repo and marketplace version/platform claims differ; no runtime check."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/VolmitSoftware/React",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_react",
+      "source_owner": "VolmitSoftware",
+      "source_published_period": null,
+      "summary": "GPL-3.0 source and Gradle shaded-plugin build instructions; Java 25 requirement is vendor-claimed."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/VolmitSoftware/Iris",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_iris",
+      "source_owner": "VolmitSoftware",
+      "source_published_period": null,
+      "summary": "GPL-3.0; explicitly separates Bukkit-family plugin and mod jars, with plugin installation in plugins/. Only plugin route used."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/PolyhedralDev/Terra",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_terra",
+      "source_owner": "PolyhedralDev",
+      "source_published_period": null,
+      "summary": "Open-source terrain generation supporting Bukkit-family/Paper and distinct Fabric runtime; only plugin route used as partial substitute."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/lucko/spark",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_spark",
+      "source_owner": "lucko",
+      "source_published_period": null,
+      "summary": "Free open-source GPL server profiler; CPU/memory/server-health visibility partially substitutes performance diagnostics, without proving automated mitigation parity."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/EssentialsX/Essentials",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_essentials",
+      "source_owner": "EssentialsX",
+      "source_published_period": null,
+      "summary": "GPL CraftBukkit/Spigot/Paper suite; economy, chat and administration context. Partial substitute; no feature-equivalence or current paid conversion claim."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/RoinujNosde/SimpleClans",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_clans",
+      "source_owner": "RoinujNosde",
+      "source_published_period": null,
+      "summary": "Active GPL Bukkit clans fork; older marcelo-mason repository is archived and redirects here. Clan operations partial substitute."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/Zrips/Jobs",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_jobs",
+      "source_owner": "Zrips",
+      "source_published_period": null,
+      "summary": "Open-source jobs plugin with build route and CMILib dependency. Self-build context; ready-made binary pricing not independently verified."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://docs.papermc.io/paper/reference/global-configuration/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "paper_limiter",
+      "source_owner": "Paper",
+      "source_published_period": null,
+      "summary": "Platform packet limiter offers kick/drop per-rate controls. Partial base-platform substitute, not another plugin or demonstrated exploit-coverage equivalent."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/NEZNAMY/TAB",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_tab",
+      "source_owner": "NEZNAMY",
+      "source_published_period": null,
+      "summary": "Apache-2.0 server/proxy information-display plugin with releases and build instructions; author explicitly calls current plugin free. Historical buyers receive additional support; free support limited."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://github.com/Archy-X/AuraSkills",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "repo_skills",
+      "source_owner": "Archy-X",
+      "source_published_period": null,
+      "summary": "GPL RPG skills server plugin; source compilation documented. Skills, stats and abilities give partial progression substitute context."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://nightexpressdev.com/excellentenchants/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "docs_enchants",
+      "source_owner": "NightExpress",
+      "source_published_period": null,
+      "summary": "Server enchantment plugin; current compatibility table limits server versions, requires NightCore and excludes Folia. Free binary/license terms not proven by this opened page: pricing UNKNOWN."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://nightexpressdev.com/excellentcrates/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "docs_crates",
+      "source_owner": "NightExpress",
+      "source_published_period": null,
+      "summary": "Spigot/Paper crate plugin; NightCore required, Folia unsupported. Download links and voluntary donation observed; current binary price not established here: UNKNOWN."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://xiao-momi.github.io/craft-engine-wiki/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "docs_craft",
+      "source_owner": "XiaoMoMi",
+      "source_published_period": null,
+      "summary": "Server-side custom-content framework without client mods; verified premium users access support, public developers have an API-help channel."
+    },
+    {
+      "canonical_identity": "vendor:advancedplugins/AdvancedJobs",
+      "canonical_url": "https://www.advancedplugins.net/item/AdvancedJobs.187/",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "product_form_verification_kind": "EXPLICIT_SERVER_PLUGIN_RUNTIME",
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "advancedjobs_offer",
+      "source_owner": "AdvancedPlugins",
+      "source_published_period": null,
+      "summary": "Spigot jobs plugin offered at EUR17.99 promotion from EUR26.99; lifetime updates/support claimed. No attributable purchase count or completed payment observed."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://www.spigotmc.org/members/angeschossen.315463/",
+      "exclusion_reason": "Explicit purchase parked: fresh positive form/identity chain admitting native Lands row not completed; EXCLUDED_UNVERIFIED.",
+      "limitations": "Public self-report or vendor claim; no purchase receipts, independent runtime verification or representative sampling.",
+      "locator": "Opened body/README/member comments; paraphrased evidence",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "buyer_lands",
+      "source_owner": "Independent forum buyer",
+      "source_published_period": null,
+      "summary": "Explicit Lands purchase and Discord verification request. Current standalone Lands form not recovered in this dossier; parked evidence, no pool membership or demand promotion."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://www.reddit.com/r/admincraft/comments/zmvk7a/is_premium_plugins_worth_it/",
+      "exclusion_reason": "Context only; no canonical eligible product or new pool assigned.",
+      "limitations": "Generic historical opinions/self-reported migration, no attributable product transaction or representative conversion evidence.",
+      "locator": "Post and comments, lines 21-22, 69, 79-88",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "generic_premium_value",
+      "source_owner": "Independent historical community actors",
+      "source_published_period": "2022-12-15 / historical",
+      "summary": "Operator describes premium content/support helping setup and maintenance while questioning static gameplay. Another reports repeatedly switching free-to-premium/custom for exact requirements; another prefers open source for self-repair. Product-specific payment attribution unresolved."
+    },
+    {
+      "canonical_identity": null,
+      "canonical_url": "https://www.reddit.com/r/admincraft/comments/1vobvhi/can_developing_minecraft_pluginsmods_really/",
+      "exclusion_reason": "UNKNOWN product/job attribution; parked without demand-pool promotion.",
+      "limitations": "Payment self-report refers to generic freelance work, not a verified PLUGIN_ONLY product. No extrapolation to plugin demand or earnings.",
+      "locator": "Comment lines 219-229",
+      "opened": true,
+      "retrieval_date": "2026-10-03",
+      "retrieval_precision": "day",
+      "source_id": "generic_commission_payment",
+      "source_owner": "Independent community commenter Rirkash",
+      "source_published_period": "2026-08-14 thread; comment exact date unresolved",
+      "summary": "Commenter reports paying a freelancer for two commissions in a discussion mixing plugins, mods and general development. Thread also questions career sustainability. Specific deliverable, plugin form and operator job cannot be attributed safely."
+    }
+  ],
+  "supplemental_policy": "Accepted YEE-77 and supervisor-fixed YEE-81 are corroboration only; no upstream direction/cohort/score imported. Fresh AdvancedJobs offer and tentative chat intent reconciled after pool formation.",
+  "verification_notes": [
+    {
+      "canonical_identity": "voxel:6271",
+      "fresh_attempt_status": "ACCESS_UNAVAILABLE",
+      "opened_source_ids": [],
+      "reason": "Native title/author describes an ExcellentShop configuration from Rafalll, distinct from NightExpress's actual plugin. Fresh native access failed. Product form unverified; actual plugin counter never assigned to config."
+    },
+    {
+      "canonical_identity": "voxel:876",
+      "fresh_attempt_status": "POSITIVE_FORM_UNRESOLVED",
+      "opened_source_ids": [
+        "buyer_lands"
+      ],
+      "reason": "Explicit Lands purchase statement opened on author member page; positive current standalone server-plugin identity/form chain not completed. Payment parked, no recovery."
+    },
+    {
+      "canonical_identity": "voxel:3413",
+      "fresh_attempt_status": "POSITIVE_FORM_UNRESOLVED",
+      "opened_source_ids": [
+        "buyer_diary"
+      ],
+      "reason": "Independent purchase diary mentions MMOItems, but a fresh primary product-form/identity chain was not completed. No promotion based on buyer-name match or loader claims."
+    },
+    {
+      "canonical_identity": "voxel:1341",
+      "fresh_attempt_status": "NOT_POSITIVELY_VERIFIED",
+      "opened_source_ids": [],
+      "reason": "Inherited description indicates CarbonSpigot server software. No fresh positive proof of a standalone server/proxy plugin; excluded."
+    },
+    {
+      "canonical_identity": "voxel:1476",
+      "fresh_attempt_status": "NOT_POSITIVELY_VERIFIED",
+      "opened_source_ids": [],
+      "reason": "Inherited description indicates NullCordX proxy software. Paid price does not prove plugin form; no fresh positive standalone plugin proof."
+    },
+    {
+      "canonical_identity": "voxel:6022",
+      "fresh_attempt_status": "NOT_POSITIVELY_VERIFIED",
+      "opened_source_ids": [],
+      "reason": "Cosmetic wings resource remains ambiguous asset/runtime form. No fresh positive server-plugin proof."
+    }
+  ]
+}
